@@ -1,0 +1,40 @@
+name: tsgxr
+
+channels:
+  - conda-forge # get things from conda-forge first
+  - defaults
+
+dependencies:
+  - python>=3.10
+  - mamba
+  - numpy
+  - pandas
+  - matplotlib
+  - xarray
+  - zarr
+  - dask
+  - distributed
+  - jupyter
+  - jupyterlab
+  - ipykernel
+  - pip
+  - black
+  - isort
+  - pytest
+  - pytest-cov
+  - versioneer
+  - pip:
+    - -e .
+
+
+# Create ################################################
+# mamba env create -f environment.yml
+# python -m ipykernel install --user --name tsgxr
+
+# ACTIVATE ##############################################
+# conda activate tsgxr
+
+# REMOVE ################################################
+# conda deactivate tsgxr
+# conda env remove -n tsgxr
+# jupyter kernelspec uninstall tsgxr

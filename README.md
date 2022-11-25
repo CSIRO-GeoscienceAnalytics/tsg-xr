@@ -1,2 +1,3 @@
 # tsg-xr
-Tool for loading TSG datasets into Xarray, allowing export to Zarr.
+
+A tool for loading TSG datasets into Xarray, allowing export to Zarr.
