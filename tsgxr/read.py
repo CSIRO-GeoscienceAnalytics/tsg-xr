@@ -1,0 +1,248 @@
+from pathlib import Path
+import re
+
+import numpy as np
+import pandas as pd
+import xarray
+
+from pytsg import parse_tsg
+
+
+def load_tsg(directory, spectra="NIR", image=True, subsample_image=10):
+    """
+    Load a TSG dataset.
+
+    Parameters
+    ----------
+    directory : str | pathlib.Path
+                Directory of the TSG datset to load.
+    spectra : str
+                Which spectra to load by default, NIR or TIR.
+    image : bool
+                Whether to load the high-resolution RGB imagery.
+    subsample_image : int
+                Subsampling factor for the high-resolution RGB imagery.
+        Default of 10 returns a 100x reduction in image size/
+        1% of all pixels.
+
+    Returns
+    -------
+    xarray.Dataset
+                Dataset containing the spectra and assocaited data.
+    """
+    directory = Path(directory)
+    tsgdata = parse_tsg.read_package(directory, read_cras_file=image)
+    dataset = tsg_to_xarray(getattr(tsgdata, spectra.lower()))
+    if image:
+        dataset["Image"] = cras_to_dataarray(tsgdata, subsample=subsample_image)
+    dataset = reorder_variables(dataset)
+    return dataset
+
+
+def tsg_to_xarray(spectraldata):
+    """
+        Load a TSG spectral subset into Xarray.
+
+    Parameters
+    ----------
+    spectraldata  : pytsg.parse_tsg.Spectra
+                Spectral subset loaded with pytsg.
+
+    Returns
+    -------
+    xarray.Dataset
+                Dataset containing spectra and band headers.
+
+    Todo
+    -----
+    * Consider indexing by depth instead of sample, after the fact.
+    * Consider dropping Tray, Section, Depth (m) as they're duplicated as indexes.
+    * Consider dropping SecDist (mm), TraySamp, SecSamp and NumFeats - they can be calculated.
+    """
+    scalar_data = spectraldata.scalars.copy()
+    floatvals = scalar_data.select_dtypes(float).columns
+    scalar_data[floatvals] = np.where(
+        np.isclose(scalar_data.loc[:, floatvals].values, np.finfo("float32").min),
+        np.nan,
+        scalar_data.loc[:, floatvals.values],
+    )  # [np.isclose(scalars, np.finfo('float32').min  )] = np.nan
+    # could drop emtpy columns but is unlikely to be many
+    dataset = scalar_data.set_index(
+        pd.Series(scalar_data.index.values, name="sample")
+    ).to_xarray()
+    dataset.attrs.update(
+        {
+            ch.name: [(i, v) for i, v in ch.classes.items()]
+            for id, ch in spectraldata.classes.items()
+        }
+    )
+
+    for grp in ["Centre", "Depth", "Width"]:
+        arr = (
+            dataset[[v for v in dataset.data_vars if re.match(grp + "\d+", v)]]
+            .to_array()
+            .rename({"variable": "feature"})
+        )
+        dataset = dataset[
+            [v for v in dataset.data_vars if v not in arr.coords["feature"]]
+        ]
+        arr["feature"] = [f.replace(grp, "") for f in arr["feature"].values]
+        arr = xarray.where(arr == 0, np.nan, arr)
+        arr.attrs = {}
+
+        dataset[grp + "s"] = arr
+
+    # convert traynames, otherwise occasionally converted to integers
+    dataset["Tray"] = dataset["Tray"].astype("<U16")
+    # add the spectra, and move it to the top of the variable list
+    coords = coords_from_sampleheaders(spectraldata)
+    dataset["Spectra"] = xarray.DataArray(
+        spectraldata.spectra, coords=coords, dims=("sample", "wavelength")
+    )
+    dataset = dataset[["Spectra"] + [v for v in dataset.data_vars if v != "Spectra"]]
+    dataset.set_coords(coords)
+    return dataset
+
+
+def coords_from_sampleheaders(spectraldata):
+    """
+    Turn the sample headers of a TSG spectral subset into coordinates.
+
+    Parameters
+    ----------
+    spectraldata  : pytsg.parse_tsg.Spectra
+                Spectral subset loaded with pytsg.
+
+    Returns
+    -------
+    coords : dict
+                Mapping of coordinate names to values, and in the case of non-index coordinates
+        the corresponding index coordinate.
+    """
+    sampleheaders = spectraldata.sampleheaders.apply(
+        pd.to_numeric, errors="ignore"
+    ).rename(
+        columns={
+            "sample": "sample",
+            "T": "tray",
+            "L": "section",
+            "P": "coresection",  # this doesn't quite match what's expected?
+            "D": "holedepth",
+            "X": "depth",
+            "H": "hole",
+        }
+    )
+    coords = {
+        "sample": sampleheaders["sample"].values,
+        "wavelength": spectraldata.wavelength,
+    }
+    coords.update(
+        {c: ("sample", d.values) for c, d in sampleheaders.items() if c != "sample"}
+    )
+    return coords
+
+
+def cras_to_dataarray(tsgdata, subsample=10):
+    """
+    Get the high resolution imagery from a TSG file, and optionally subsample it
+    to a lower resolution.
+
+    Parameters
+    ----------
+    tsgdata : pytsg.parse_tsg.TSG
+                TSG dataset loaded with pytsg.
+
+    Returns
+    -------
+    xarray.DataArray
+                Array containing the RGB imagery.
+    """
+    depths = np.hstack(
+        [
+            np.linspace(mn, mx, t.nlines)
+            for (t, (mn, mx)) in zip(
+                tsgdata.cras.tray,
+                tsgdata.nir.sampleheaders[["T", "L", "D"]]
+                .apply(pd.to_numeric)
+                .groupby(["T", "L"])
+                .agg(["min", "max"])
+                .values,
+            )
+        ]
+    )
+    dx = dy = np.diff(depths[:2])
+    horizontal = np.arange(0, tsgdata.cras.image.shape[1]) * dy
+    horizontal -= horizontal.mean()
+    cras = xarray.DataArray(
+        tsgdata.cras.image,
+        coords={"depth": depths, "horizontal": horizontal, "channel": list("RGB")},
+    )
+    return cras[::subsample, ::subsample]
+
+
+def reorder_variables(
+    ds,
+    drop=["Tray", "Section", "Depth (m)", "SecDist (mm)", "TraySamp", "SecSamp"],
+    patterns=[
+        "Grp\d*",
+        "Min\d*",
+        "Wt\d*",
+        "Error\d*",
+        "SNR",
+        "NIL_Stat",
+        "Cust",
+        "Bound_Water",
+        "Unbound_Water",
+    ],
+):
+    """
+    Reorder the variables within an Xarray dataset containing TSG data such that
+    it's more easily visually navigated (note this does not persist upon
+    serialization).
+
+    Parameters
+    ----------
+    ds : xarray.Dataset
+                Dataset to reorder.
+    drop : list
+                Variables to exclude (typically either duplciated in indexes or easily calculated).
+    patterns : list
+                List of regex patterns to match column groups of band headers within TSG files.
+
+        Returns
+    -------
+    ds : xarray.Dataset
+                Reordered dataset.
+    """
+    arrangement = [
+        "HoleID",
+        "Date",
+        "Depth (m)",
+        "Tray",
+        "Section",
+        "Spectra",
+        "Image",
+        "Centres",
+        "Depths",
+        "Widths",
+    ]
+
+    arrangement += [
+        v
+        for ptn in patterns
+        for v in sorted([v for v in ds.data_vars if re.match(ptn, v)])
+    ]
+
+    others = sorted(
+        list(
+            set(
+                [v for v in ds.data_vars if (v not in arrangement)]
+                + ["Flags"]
+                + [v for v in ds.data_vars if v.lower() == v]
+            )
+        )
+    )
+    ds = ds[
+        [v for v in arrangement + others if (v not in drop) and (v in ds.data_vars)]
+    ]
+    return ds
