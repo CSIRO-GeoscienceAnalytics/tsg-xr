@@ -15,20 +15,20 @@ def load_tsg(directory, spectra="NIR", image=True, subsample_image=10):
     Parameters
     ----------
     directory : str | pathlib.Path
-                Directory of the TSG datset to load.
+        Directory of the TSG datset to load.
     spectra : str
-                Which spectra to load by default, NIR or TIR.
+        Which spectra to load by default, NIR or TIR.
     image : bool
-                Whether to load the high-resolution RGB imagery.
+        Whether to load the high-resolution RGB imagery.
     subsample_image : int
-                Subsampling factor for the high-resolution RGB imagery.
+        Subsampling factor for the high-resolution RGB imagery.
         Default of 10 returns a 100x reduction in image size/
         1% of all pixels.
 
     Returns
     -------
     xarray.Dataset
-                Dataset containing the spectra and assocaited data.
+        Dataset containing the spectra and assocaited data.
     """
     directory = Path(directory)
     tsgdata = parse_tsg.read_package(directory, read_cras_file=image)
@@ -41,17 +41,17 @@ def load_tsg(directory, spectra="NIR", image=True, subsample_image=10):
 
 def tsg_to_xarray(spectraldata):
     """
-        Load a TSG spectral subset into Xarray.
+    Load a TSG spectral subset into Xarray.
 
     Parameters
     ----------
     spectraldata  : pytsg.parse_tsg.Spectra
-                Spectral subset loaded with pytsg.
+        Spectral subset loaded with pytsg.
 
     Returns
     -------
     xarray.Dataset
-                Dataset containing spectra and band headers.
+        Dataset containing spectra and band headers.
 
     Todo
     -----
@@ -111,12 +111,12 @@ def coords_from_sampleheaders(spectraldata):
     Parameters
     ----------
     spectraldata  : pytsg.parse_tsg.Spectra
-                Spectral subset loaded with pytsg.
+        Spectral subset loaded with pytsg.
 
     Returns
     -------
     coords : dict
-                Mapping of coordinate names to values, and in the case of non-index coordinates
+        Mapping of coordinate names to values, and in the case of non-index coordinates
         the corresponding index coordinate.
     """
     sampleheaders = spectraldata.sampleheaders.apply(
@@ -150,12 +150,12 @@ def cras_to_dataarray(tsgdata, subsample=10):
     Parameters
     ----------
     tsgdata : pytsg.parse_tsg.TSG
-                TSG dataset loaded with pytsg.
+        TSG dataset loaded with pytsg.
 
     Returns
     -------
     xarray.DataArray
-                Array containing the RGB imagery.
+        Array containing the RGB imagery.
     """
     depths = np.hstack(
         [
@@ -203,16 +203,16 @@ def reorder_variables(
     Parameters
     ----------
     ds : xarray.Dataset
-                Dataset to reorder.
+        Dataset to reorder.
     drop : list
-                Variables to exclude (typically either duplciated in indexes or easily calculated).
+        Variables to exclude (typically either duplciated in indexes or easily calculated).
     patterns : list
-                List of regex patterns to match column groups of band headers within TSG files.
+        List of regex patterns to match column groups of band headers within TSG files.
 
-        Returns
+    Returns
     -------
     ds : xarray.Dataset
-                Reordered dataset.
+        Reordered dataset.
     """
     arrangement = [
         "HoleID",
