@@ -13,6 +13,46 @@ binary components of the TSG file format, and `tsg-xr` is largely just arranging
 data structure which allows easier subseqent use (and serialization to indexable formats, e.g. 
 [Zarr](https://zarr.readthedocs.io).
 
+## Usage
+
+`tsg-xr` is intended to be use to read directories containing ensembles of TSG files; to do so just point the `load_tsg` funnction at the appropriate directory:
+```python
+from tsgxr import load_tsg
+
+ds = load_tsg("./Hylogger_Hole_42")
+```
+Key array-based data can be accessed directly from this `xarray.Dataset` object:
+```python
+ds.Spectra
+ds.Image
+ds.Lidar
+```
+
+For example, to extract and plot the first metre of core imagery:
+```python
+import matplotlib.pyplot as plt 								
+ds.Image.sel(depth=slice(0, 1)).plot.imshow(yincrease=False)
+plt.gca().set(aspect="equal"); # fix the aspect ratio
+```
+
+Scalars and other spectral features are also available; spectral feature (centre, depth, width) data is grouped 
+for brevity:
+```python
+ds.Centres
+ds.Depths
+ds.Widths
+ds["Grp1 sTSAS"]
+...
+ds["Min1 sTSAS"]
+...
+ds["Wt1 sTSAS"]
+...
+```
+
+Configuration related to integer-encoding of sample data is also included in the dataset attributes:
+```python
+ds.attrs
+````
 
 ## Installation 
 
