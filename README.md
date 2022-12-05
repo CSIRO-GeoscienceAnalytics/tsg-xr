@@ -1,6 +1,7 @@
 # `tsg-xr`: A tool for loading TSG datasets into Xarray
 
-The file format associated with The Spectral Geologist™ (and particularly with Hylogger™ datasets which 
+The file format associated with [The Spectral Geologist™](https://research.csiro.au/thespectralgeologist/) 
+(and specifically [Hylogger™](https://corescan.com.au/products/hylogger/) datasets which
 have been processed with the software) consists of an ensemble of files:
 * Binary data files containing spectra, high resolutoin imagery and profilometer data
 * Configuration files (principally text, similar in format to TOML)
@@ -8,10 +9,10 @@ have been processed with the software) consists of an ensemble of files:
 
 `tsg-xr` heavily leverages the filereader of [`pytsg`](https://github.com/FractalGeoAnalytics/pytsg) to 
 provide access to these data, and presents data in an [Xarray](xarray.pydata.org) format to condense the 
-otherwise complex arrangement and separation of components. `pytsg` provides an efficient interface to the 
+otherwise complex arrangement. Here `pytsg` provides an efficient interface to the 
 binary components of the TSG file format, and `tsg-xr` is largely just arranging this into a condensed 
 data structure which allows easier subseqent use (and serialization to indexable formats, e.g. 
-[Zarr](https://zarr.readthedocs.io).
+[Zarr](https://zarr.readthedocs.io)).
 
 ## Usage
 
