@@ -303,6 +303,7 @@ def reorder_variables(
         "Section",
         "Spectra",
         "Image",
+        "Lidar",
         "Centres",
         "Depths",
         "Widths",
