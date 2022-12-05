@@ -3,7 +3,7 @@ from setuptools import setup
 
 
 with open("README.md", "r") as src:
-	LONG_DESCRIPTION = src.read()
+    LONG_DESCRIPTION = src.read()
 
 
 setup(
@@ -29,7 +29,13 @@ setup(
     ],
     keywords=["TSG", "spectra"],
     packages=["tsgxr"],
-    install_requires=["numpy", "xarray", "zarr", "pandas"],
+    install_requires=[
+        "numpy",
+        "xarray",
+        "zarr",
+        "pandas",
+        "pytsg @ git+https://github.com/FractalGeoAnalytics/pytsg",
+    ],
     extras_require={
         "plot": ["matplotlib"],
         "dev": ["pytest", "pytest-cov", "coverage", "versioneer", "black", "twine"],
