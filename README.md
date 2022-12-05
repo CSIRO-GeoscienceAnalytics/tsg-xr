@@ -67,7 +67,7 @@ The package is also directly installable from GitHub using `pip` with:
 pip install git+https://github.com/CSIRO-GeoscienceAnalytics/tsg-xr
 ```
 
-**Option 1: Setup an Environment**
+**Option 2: Setup an Environment**
 
 An `environment.yml` file is included in this repository, allowing the creation of a `conda` environment 
 where an Anaconda distribution of some form is used. After cloning this repository and navigating to this 
