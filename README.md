@@ -21,6 +21,7 @@ from tsgxr import load_tsg
 
 ds = load_tsg("./Hylogger_Hole_42")
 ```
+---
 Key array-based data can be accessed directly from this `xarray.Dataset` object:
 ```python
 ds.Spectra
@@ -35,6 +36,13 @@ ds.Image.sel(depth=slice(0, 1)).plot.imshow(yincrease=False)
 plt.gca().set(aspect="equal"); # fix the aspect ratio
 ```
 
+Similarly, to plot the spectra from a specific interval (e.g. 9.2 to 9.3m here) against wavelength, you can provide a slice to the `xarray.DataArray.sel` method (note here the `holedepth` coordinate which is associated with spectral samples, as opposed to the `depth` coordinate assocaited with RGB imagery - they are thus far separate indexes):
+```python
+ds.Spectra.sel(holedepth=slice(9.2, 9.3)).plot.scatter(x='wavelength', add_legend=False, color='k', alpha=0.5, s=2)
+```
+
+---
+
 Scalars and other spectral features are also available; spectral feature (centre, depth, width) data is grouped 
 for brevity:
 ```python
@@ -48,7 +56,7 @@ ds["Min1 sTSAS"]
 ds["Wt1 sTSAS"]
 ...
 ```
-
+---
 Configuration related to integer-encoding of sample data is also included in the dataset attributes:
 ```python
 ds.attrs
