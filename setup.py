@@ -34,7 +34,7 @@ setup(
         "xarray",
         "zarr",
         "pandas",
-        "pytsg @ git+https://github.com/FractalGeoAnalytics/pytsg",
+        "pytsg",
     ],
     extras_require={
         "plot": ["matplotlib"],
