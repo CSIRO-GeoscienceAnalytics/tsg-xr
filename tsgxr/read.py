@@ -1,6 +1,5 @@
 from pathlib import Path
 import re
-import warnings
 
 import numpy as np
 import pandas as pd
@@ -8,45 +7,6 @@ import xarray
 
 import pytsg.parse_tsg
 
-
-def load_lidar(hirespath, per_spectra=True):
-    """
-    Patch for loading high resolution profilometer data
-    with pytsg.
-
-    Parameters
-    ----------
-    hirespath : str | pathlib.path
-        Path to the hires.dat file containing profilometer data.
-    per_spectra : bool
-        Whether to aggregate the profilometer data to a per-sample
-        /per-spectra basis, allowing direct integration.
-
-    Returns
-    -------
-    numpy.ndarray
-        Profilometer data array.
-    """
-    with open(hirespath, "rb") as f:
-        idchar = f.read(20)  # CoreLog high-res 1.0
-        nsclr, nl, nsps = np.fromfile(f, np.int32, 3)
-        minp, maxp = np.fromfile(f, np.float32, 2)
-        _prof = f.read(len("Profilometer"))
-        # four int8/bytes, two int16 or one int32 gives 64 * 8 * n_spectra profilometer samples
-        _ = np.fromfile(f, np.ubyte, 4)
-        assert (_ == 0).all()
-        lidar = np.fromfile(f, dtype=np.float32)
-        # could do additional validation here
-        lidar[lidar < minp] = np.nan
-
-    if per_spectra:
-        with warnings.catch_warnings():
-            warnings.filterwarnings("ignore", message="Mean of empty slice")
-            lidar = np.nanmean(lidar.reshape(-1, nsps), axis=1)
-    return lidar
-
-
-pytsg.parse_tsg.read_hires_dat = load_lidar  # patch the function
 
 
 def load_tsg(

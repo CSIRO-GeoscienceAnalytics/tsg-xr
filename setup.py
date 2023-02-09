@@ -34,7 +34,7 @@ setup(
         "xarray",
         "zarr",
         "pandas",
-        "pytsg",
+        "pytsg>=0.2.8",
     ],
     extras_require={
         "plot": ["matplotlib"],
