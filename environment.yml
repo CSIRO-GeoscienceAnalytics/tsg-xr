@@ -18,15 +18,16 @@ dependencies:
   - jupyterlab
   - ipykernel
   - pip
+  - typer
   - black
   - isort
   - pytest
   - pytest-cov
   - versioneer
+  - jupyterlab-spellchecker
+  - jupyterlab_code_formatter
   - pip:
-    - -e .
-
-
+      - -e .
 # Create ################################################
 # mamba env create -f environment.yml
 # python -m ipykernel install --user --name tsgxr

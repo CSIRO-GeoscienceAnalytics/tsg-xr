@@ -223,7 +223,7 @@ def cras_to_dataarray(tsgdata, subsample=10):
 
 def reorder_variables(
     ds,
-    drop=["Tray", "Section", "Depth (m)", "SecDist (mm)", "TraySamp", "SecSamp"],
+    drop=[],  # ["Tray", "Section", "Depth (m)", "SecDist (mm)", "TraySamp", "SecSamp"],
     patterns=[
         "Grp\d*",
         "Min\d*",
