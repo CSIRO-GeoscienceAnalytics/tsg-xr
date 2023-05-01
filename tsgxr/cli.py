@@ -29,7 +29,7 @@ def TSG2zarr(
     ),
     spectra: str = typer.Option(
         "NIR",
-        help="Whether to load NIR or TIR data."
+        help="Whether to load NIR or TIR data. "
         "Note that if a specific .tsg file is specified, this option will effecitvely be ignored.",
     ),
     index_coord: str = typer.Option(
