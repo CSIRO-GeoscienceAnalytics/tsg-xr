@@ -41,10 +41,10 @@ def TSG2zarr(
     Convert TSG file(s) to Zarr.
     """
     if (
-        not TSGdir.is_dir() and TSGdir.suffix.lower() == ".tsg"
+        not tsgdir.is_dir() and tsgdir.suffix.lower() == ".tsg"
     ):  # pointing to a specific .tsg file
-        spectra = "TIR" if TSGdir.stem.lower().endswith("tir") else "NIR"
-        datasets = {TSGdir.parent.stem: TSGdir.parent}
+        spectra = "TIR" if tsgdir.stem.lower().endswith("tir") else "NIR"
+        datasets = {tsgdir.parent.stem: tsgdir.parent}
     else:
         datasets = find_TSG_datasets(tsgdir)
 
