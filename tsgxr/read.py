@@ -70,8 +70,9 @@ def tsg_to_xarray(tsgdata, spectra, index_coord="sample"):
     * Consider dropping SecDist (mm), TraySamp, SecSamp and NumFeats - they can be calculated.
     """
     spectraldata = getattr(tsgdata, spectra.lower())
-    scalar_data = spectraldata.scalars.copy()
-
+    assert hasattr(spectraldata, 'spectra'), "TSG Dataset does not have {} data.".format(
+        spectra
+    )
     scalar_data = spectraldata.scalars.copy()
     floatvals = scalar_data.select_dtypes(float).columns
     scalar_data[floatvals] = np.where(
