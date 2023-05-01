@@ -26,6 +26,6 @@ def find_TSG_datasets(parent_directory):
     return {
         fpath.stem.replace("_tsg", ""): fpath.parent
         for fpath in sorted(
-            set([fpath for fpath in Path(parent_directory).glob("**/*_tsg.tsg")])
+            set(list(Path(parent_directory).glob("**/*_tsg.tsg")) + list(Path(parent_directory).glob("**/*_tsg_tir.tsg")))
         )
     }
