@@ -15,7 +15,7 @@ from .util import Handle
 from . import __version__, find_TSG_datasets, load_tsg
 
 
-logger = Handle(__name__)
+logger = Handle(__name__, level='INFO')
 
 
 app = typer.Typer()
@@ -57,11 +57,16 @@ def TSG2zarr(
         logger.info("Loading TSG file: {}".format(tsgdir.name))
         spectra = "TIR" if tsgdir.stem.lower().endswith("tir") else "NIR"
         assert tsgdir.exists(), "Specified TSG file does not exist."
-        datasets = {tsgdir.parent.stem: tsgdir.parent}
+        datasets = {tsgdir.stem: tsgdir.parent}
     else:
         logger.info("Loading TSG files from directory: {}".format(tsgdir.name))
         assert tsgdir.exists(), "Specified directory does not exist."
         datasets = find_TSG_datasets(tsgdir)
+    
+    if datasets:
+        logger.info("Found datasets: {}".format(', '.join(k for k in datasets.keys())))
+    else:
+        logger.warning('Found no datasets in {}.'.format(str(tsgdir.resolve())))
 
     if datasets:
         for k, d in tqdm(datasets.items()):
@@ -75,7 +80,7 @@ def TSG2zarr(
             name = "_".join([str(ds.coords["hole"][0].values), spectra]) + ".zarr"
             
             # put it in the TSG directory if an output folder is not given
-            outdir =                 output_dir if output_dir is not None else d
+            outdir = output_dir if output_dir is not None else d
             logger.info("Creating Zarr archive {} in {}.".format(name, str(outdir)))
             ds.to_zarr(outdir / name, mode="w")  # overwrite if needed
 
