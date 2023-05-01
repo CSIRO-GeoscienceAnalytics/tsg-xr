@@ -2,7 +2,14 @@ from pathlib import Path
 
 import typer
 import xarray
-from tqdm.auto import tqdm
+
+try:
+    from tqdm.auto import tqdm
+except ImportError:
+
+    def tqdm(iterable):
+        return iterable
+
 
 from . import __version__, find_TSG_datasets, load_tsg
 
@@ -11,11 +18,15 @@ app = typer.Typer()
 
 @app.command()
 def TSG2zarr(
-    tsgdir: Path = typer.Argument(..., help="TSG directory."),
+    tsgdir: Path = typer.Argument(..., help="TSG directory or filepath."),
     output_dir: Path = typer.Option(
         None, help="Output directory for a Zarr data store."
     ),
-    spectra: str = typer.Option("NIR", help="Whether to load NIR or TIR data."),
+    spectra: str = typer.Option(
+        "NIR",
+        help="Whether to load NIR or TIR data."
+        "Note that if a specific .tsg file is specified, this option will effecitvely be ignored.",
+    ),
     index_coord: str = typer.Option(
         "Sample", help="Whether to use sample or depth as an index."
     ),
@@ -29,7 +40,14 @@ def TSG2zarr(
     """
     Convert TSG file(s) to Zarr.
     """
-    datasets = find_TSG_datasets(tsgdir)
+    if (
+        not TSGdir.is_dir() and TSGdir.suffix.lower() == ".tsg"
+    ):  # pointing to a specific .tsg file
+        spectra = "TIR" if TSGdir.stem.lower().endswith("tir") else "NIR"
+        datasets = {TSGdir.parent.stem: TSGdir.parent}
+    else:
+        datasets = find_TSG_datasets(tsgdir)
+
     if datasets:
         for k, d in tqdm(datasets.items()):
             ds = load_tsg(
@@ -39,7 +57,7 @@ def TSG2zarr(
                 subsample_image=subsample_image,
                 index_coord=index_coord,
             )
-            name = "_".join([str(ds.coords["hole"][0].values), spectra, ".zarr"])
+            name = "_".join([str(ds.coords["hole"][0].values), spectra]) + ".zarr"
             outdir = (
                 (output_dir / name) if output_dir is not None else d / name
             )  # put it in the TSG directory if an output folder is not given
