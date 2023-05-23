@@ -45,7 +45,7 @@ def TSG2zarr(
         None,
         help="Whether to use logging, and if so what level (DEBUG, INFO)",
     ),
-    zip: bool = typer.Option(
+    zipfile: bool = typer.Option("--zip"
         True,
         help="Whether to zip the Zarr archive upon creation.",
     ),
@@ -75,14 +75,14 @@ def TSG2zarr(
     if datasets:
         for k, d in tqdm(datasets.items()):
             ds = load_tsg(
-                d,
+                d,  
                 spectra=spectra.upper(),
                 image=image,
                 subsample_image=subsample_image,
                 index_coord=index_coord,
             )
             name = "_".join([str(ds.coords["hole"][0].values), spectra]) + (
-                ".zip" if zip else ".zarr"
+                ".zip" if zipfile else ".zarr"
             )
             # put it in the TSG directory if an output folder is not given
             outdir = output_dir if output_dir is not None else d

@@ -16,7 +16,8 @@ data structure which allows easier subseqent use (and serialization to indexable
 
 ## Usage
 
-`tsg-xr` is intended to be use to read directories containing ensembles of TSG files; to do so just point the `load_tsg` funnction at the appropriate directory:
+`tsg-xr` is intended to be used to read directories containing ensembles of TSG files; 
+to do so just point the `load_tsg` funnction at the appropriate directory:
 ```python
 from tsgxr import load_tsg
 
