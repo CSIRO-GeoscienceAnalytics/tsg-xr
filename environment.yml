@@ -26,6 +26,7 @@ dependencies:
   - versioneer
   - jupyterlab-spellchecker
   - jupyterlab_code_formatter
+  - twine
   - pip:
       - -e .
 # Create ################################################
