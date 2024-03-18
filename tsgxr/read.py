@@ -8,7 +8,6 @@ import xarray
 import pytsg.parse_tsg
 
 
-
 def load_tsg(
     directory, spectra="NIR", image=True, subsample_image=10, index_coord="sample"
 ):
@@ -71,8 +70,9 @@ def tsg_to_xarray(tsgdata, spectra, index_coord="sample"):
     * Consider dropping SecDist (mm), TraySamp, SecSamp and NumFeats - they can be calculated.
     """
     spectraldata = getattr(tsgdata, spectra.lower())
-    scalar_data = spectraldata.scalars.copy()
-
+    assert hasattr(spectraldata, 'spectra'), "TSG Dataset does not have {} data.".format(
+        spectra
+    )
     scalar_data = spectraldata.scalars.copy()
     floatvals = scalar_data.select_dtypes(float).columns
     scalar_data[floatvals] = np.where(
@@ -114,9 +114,12 @@ def tsg_to_xarray(tsgdata, spectra, index_coord="sample"):
         spectraldata.spectra, coords=coords, dims=("sample", "wavelength")
     )
     if index_coord != "depth":
-        profilometer = xarray.DataArray(
-            tsgdata.lidar, coords={"sample": specarr.sample.values}
-        )
+        if tsgdata.lidar is not None:
+            profilometer = xarray.DataArray(
+                tsgdata.lidar, coords={"sample": specarr.sample.values}
+            )
+        else:
+            profilometer = None
         # alternate method for being able to index on depth for spectral without
         # dropping rows
         # specarr = specarr.set_xindex('holedepth')
@@ -129,12 +132,17 @@ def tsg_to_xarray(tsgdata, spectra, index_coord="sample"):
         sortidx = np.argsort(specarr.holedepth.values)
         specarr = specarr[sortidx].swap_dims({"sample": "holedepth"})
 
-        profilometer = xarray.DataArray(
-            tsgdata.lidar[~fltr][sortidx],
-            coords={"holedepth": specarr.holedepth.values},
-        )
+        if tsgdata.lidar is not None:
+            profilometer = xarray.DataArray(
+                tsgdata.lidar[~fltr][sortidx],
+                coords={"holedepth": specarr.holedepth.values},
+            )
+        else:
+            profilometer = None
+
     dataset["Spectra"] = specarr
-    dataset["Lidar"] = profilometer
+    if profilometer is not None:
+        dataset["Lidar"] = profilometer
     dataset = dataset[["Spectra"] + [v for v in dataset.data_vars if v != "Spectra"]]
     return dataset
 
@@ -223,7 +231,7 @@ def cras_to_dataarray(tsgdata, subsample=10):
 
 def reorder_variables(
     ds,
-    drop=["Tray", "Section", "Depth (m)", "SecDist (mm)", "TraySamp", "SecSamp"],
+    drop=[],  # ["Tray", "Section", "Depth (m)", "SecDist (mm)", "TraySamp", "SecSamp"],
     patterns=[
         "Grp\d*",
         "Min\d*",
@@ -256,17 +264,21 @@ def reorder_variables(
         Reordered dataset.
     """
     arrangement = [
-        "HoleID",
-        "Date",
-        "Depth (m)",
-        "Tray",
-        "Section",
-        "Spectra",
-        "Image",
-        "Lidar",
-        "Centres",
-        "Depths",
-        "Widths",
+        v
+        for v in [
+            "HoleID",
+            "Date",
+            "Depth (m)",
+            "Tray",
+            "Section",
+            "Spectra",
+            "Image",
+            "Lidar",
+            "Centres",
+            "Depths",
+            "Widths",
+        ]
+        if v in ds.data_vars
     ]
 
     arrangement += [

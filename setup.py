@@ -29,13 +29,7 @@ setup(
     ],
     keywords=["TSG", "spectra"],
     packages=["tsgxr"],
-    install_requires=[
-        "numpy",
-        "xarray",
-        "zarr",
-        "pandas",
-        "pytsg>=0.2.8",
-    ],
+    install_requires=["numpy", "xarray", "zarr", "pandas", "pytsg>=0.2.8", "typer"],
     extras_require={
         "plot": ["matplotlib"],
         "dev": ["pytest", "pytest-cov", "coverage", "versioneer", "black", "twine"],
@@ -45,4 +39,9 @@ setup(
     include_package_data=True,
     license="MIT",
     cmdclass=versioneer.get_cmdclass(),
+    entry_points={
+        "console_scripts": [
+            "tsgxr = tsgxr.cli:app",
+        ]
+    },
 )

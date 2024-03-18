@@ -16,7 +16,8 @@ data structure which allows easier subseqent use (and serialization to indexable
 
 ## Usage
 
-`tsg-xr` is intended to be use to read directories containing ensembles of TSG files; to do so just point the `load_tsg` funnction at the appropriate directory:
+`tsg-xr` is intended to be used to read directories containing ensembles of TSG files; 
+to do so just point the `load_tsg` funnction at the appropriate directory:
 ```python
 from tsgxr import load_tsg
 
@@ -91,3 +92,20 @@ Alternatively, if you have `mamba` installed locally (encouraged), you can get t
 mamba env create -f environment.yml
 ```
 
+## Command Line Interface
+
+### Converting TSG files to Zarr
+
+A minimal command line interface exists for converstion of TSG files to Zarr archives. A selection of configuration options are avialable from the commandline, which can be found under the help menu:
+```bash
+tsgxr tsg2zarr --help
+```
+Basic usage is as follows, where `<Path>` refers to either i) an individual TSG scalars file (`.tsg`), ii) a Hylogger TSG directory, or iii) a directory containing multiple Hylogger TSG directories (multiple datasets can be converted simultaneously):
+```bash
+tsgxr tsg2zarr <Path>
+```
+Outputs are by default added to the Hylogger TSG directories themselves, but can be optionally collated into a separate directory; outputs will use the hole name extracted from the TSG dataset and be specific to the spectra specified (NIR or TIR):
+```bash
+tsgxr tsg2zarr <Path> --output_dir "./collated_zarr_archives/"
+```
+Note that by default, this will create zipped Zarr archives. These can be directly opened in e.g. Xarray.
