@@ -1,11 +1,47 @@
-from pathlib import Path
 import re
+from pathlib import Path
 
 import numpy as np
 import pandas as pd
+import pytsg.parse_tsg
 import xarray
 
-import pytsg.parse_tsg
+# change a default setting for pytsg
+# pytsg.parse_tsg.read_hires_dat = partial(pytsg.parse_tsg.read_hires_dat,  per_spectra=False)
+
+
+def interpolate_section_depths(section_depths, ninterp):
+    """
+    Interpolate section depths based on a number of interpolated samples.
+
+    Parameters
+    ----------
+    section_depths : numpy.ndarray (n_sections, 2)
+        Array containing the minimum and maximum depths of each section.
+    ninterp : int | numpy.ndarray (n_sections)
+        Either a constant number of divisions or a number of divisions per section.
+
+    Returns
+    -------
+    numpy.ndarray (nsamples, )
+        Interpoalted within-section depths.
+    """
+
+    assert isinstance(ninterp, (int, np.ndarray, list))
+    if isinstance(ninterp, int):
+        ninterp = np.ones(section_depths.shape[0]) * ninterp
+    else:
+        ninterp = np.array(ninterp)
+        assert ninterp.dtype.kind in ["i"]
+    return np.hstack(
+        [
+            np.linspace(mn, mx, nint)
+            for (nint, (mn, mx)) in zip(
+                ninterp,
+                section_depths,
+            )
+        ]
+    )
 
 
 def load_tsg(
@@ -70,9 +106,9 @@ def tsg_to_xarray(tsgdata, spectra, index_coord="sample"):
     * Consider dropping SecDist (mm), TraySamp, SecSamp and NumFeats - they can be calculated.
     """
     spectraldata = getattr(tsgdata, spectra.lower())
-    assert hasattr(spectraldata, 'spectra'), "TSG Dataset does not have {} data.".format(
-        spectra
-    )
+    assert hasattr(
+        spectraldata, "spectra"
+    ), "TSG Dataset does not have {} data.".format(spectra)
     scalar_data = spectraldata.scalars.copy()
     floatvals = scalar_data.select_dtypes(float).columns
     scalar_data[floatvals] = np.where(
@@ -206,18 +242,16 @@ def cras_to_dataarray(tsgdata, subsample=10):
     xarray.DataArray
         Array containing the RGB imagery.
     """
-    depths = np.hstack(
-        [
-            np.linspace(mn, mx, t.nlines)
-            for (t, (mn, mx)) in zip(
-                tsgdata.cras.section,
-                tsgdata.nir.sampleheaders[["T", "L", "D"]]
-                .apply(pd.to_numeric)
-                .groupby(["T", "L"])
-                .agg(["min", "max"])
-                .values,
-            )
-        ]
+    section_depths = (
+        tsgdata.nir.sampleheaders[["T", "L", "D"]]
+        .apply(pd.to_numeric)
+        .groupby(["T", "L"])
+        .agg(["min", "max"])
+        .values
+    )
+
+    depths = interpolate_section_depths(
+        section_depths, [t.nlines for t in tsgdata.cras.section]
     )
     dx = dy = np.median(np.diff(depths[:200]))
     horizontal = np.arange(0, tsgdata.cras.image.shape[1]) * dy
