@@ -5,12 +5,12 @@ channels:
   - defaults
 
 dependencies:
-  - python>=3.10
-  - mamba
+  - python<=3.11
   - numpy
   - pandas
   - matplotlib
   - xarray
+  - xarray-datatree
   - zarr
   - dask
   - distributed
@@ -19,8 +19,7 @@ dependencies:
   - ipykernel
   - pip
   - typer
-  - black
-  - isort
+  - ruff
   - pytest
   - pytest-cov
   - versioneer
@@ -30,7 +29,7 @@ dependencies:
   - pip:
       - -e .
 # Create ################################################
-# mamba env create -f environment.yml
+# conda env create -f environment.yml
 # python -m ipykernel install --user --name tsgxr
 
 # ACTIVATE ##############################################
