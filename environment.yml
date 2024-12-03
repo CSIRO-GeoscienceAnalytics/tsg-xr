@@ -9,11 +9,11 @@ dependencies:
   - numpy
   - pandas
   - matplotlib
-  - xarray
-  - xarray-datatree
+  - xarray>=2024.10
   - zarr
   - dask
   - distributed
+  - tqdm
   - jupyter
   - jupyterlab
   - ipykernel

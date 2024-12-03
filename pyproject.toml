@@ -12,7 +12,14 @@ classifiers = [
   "License :: OSI Approved :: MIT License",
   "Operating System :: OS Independent",
 ]
-dependencies = ["numpy", "xarray", "zarr", "pandas", "pytsg>=0.2.8", "typer"]
+dependencies = [
+  "numpy",
+  "xarray>=2024.10",
+  "zarr",
+  "pandas",
+  "pytsg>=0.2.8",
+  "typer",
+]
 keywords = ["TSG", "spectra"]
 dynamic = ["version", "readme"]
 license = { text = "MIT License" }
@@ -41,7 +48,7 @@ docs = [
   "ipykernel",                 # for nbsphinx to find a kernel
 ]
 test = ["pytest", "pytest-cov", "coverage"]
-dev = ["build", "ruff", "twine", "tsgx-xr[plot,test,docs]"]
+dev = ["build", "ruff", "twine", "tsg-xr[plot,test,docs]"]
 
 [tool.setuptools.dynamic]
 readme = { file = "README.md", content-type = "text/markdown" }

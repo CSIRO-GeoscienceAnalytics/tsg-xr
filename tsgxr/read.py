@@ -9,7 +9,12 @@ import pytsg.parse_tsg
 
 
 def load_tsg(
-    directory, spectra="NIR", image=True, subsample_image=10, index_coord="sample"
+    directory,
+    spectra="NIR",
+    image=True,
+    subsample_image=10,
+    index_coord="sample",
+    **kwargs,
 ):
     """
     Load a TSG dataset.
@@ -33,10 +38,10 @@ def load_tsg(
     Returns
     -------
     xarray.Dataset
-        Dataset containing the spectra and assocaited data.
+        Dataset containing the spectra and associated data.
     """
     directory = Path(directory)
-    tsgdata = pytsg.parse_tsg.read_package(directory, read_cras_file=image)
+    tsgdata = pytsg.parse_tsg.read_package(directory, read_cras_file=image, **kwargs)
     dataset = tsg_to_xarray(tsgdata, spectra, index_coord=index_coord)
     if image:
         dataset["Image"] = cras_to_dataarray(tsgdata, subsample=subsample_image)
@@ -70,9 +75,9 @@ def tsg_to_xarray(tsgdata, spectra, index_coord="sample"):
     * Consider dropping SecDist (mm), TraySamp, SecSamp and NumFeats - they can be calculated.
     """
     spectraldata = getattr(tsgdata, spectra.lower())
-    assert hasattr(spectraldata, 'spectra'), "TSG Dataset does not have {} data.".format(
-        spectra
-    )
+    assert hasattr(
+        spectraldata, "spectra"
+    ), "TSG Dataset does not have {} data.".format(spectra)
     scalar_data = spectraldata.scalars.copy()
     floatvals = scalar_data.select_dtypes(float).columns
     scalar_data[floatvals] = np.where(
