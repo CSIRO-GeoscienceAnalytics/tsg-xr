@@ -188,11 +188,12 @@ def tsg_to_xarray(tsgdata, spectra, index_coord="sample"):
         np.nan,
         scalar_data.loc[:, floatvals.values],
     )
+    # TODO: should spectra, products, Lidar be integrated into the same dataset?
     # could drop emtpy columns but is unlikely to be many
     products = scalar_data.set_index(
         pd.Series(scalar_data.index.values, name="sample")
     ).to_xarray()
-    #TODO: some of these attributes could be propagated to other parts of the dataset
+    # TODO: some of these attributes could be propagated to other parts of the dataset
     products.attrs.update(
         {
             ch.name: [(i, v) for i, v in ch.classes.items()]
@@ -243,6 +244,8 @@ def tsg_to_xarray(tsgdata, spectra, index_coord="sample"):
         spectra_ds = spectra_ds.sel(sample=~fltr)
 
         sortidx = np.argsort(spectra_ds.depth.values)
+        # TODO: do we need to make sample a surrogate of depth here,
+        # rather than depth being an independently indexed coordinate?
         spectra_ds["Spectra"] = spectra_ds["Spectra"][sortidx].swap_dims(
             {"sample": "depth"}
         )
