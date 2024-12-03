@@ -44,6 +44,48 @@ def interpolate_section_depths(section_depths, ninterp):
     )
 
 
+def cras_to_dataset(tsgdata, subsample=10):
+    """
+    Get the high resolution imagery from a TSG file, and optionally subsample it
+    to a lower resolution.
+
+    Parameters
+    ----------
+    tsgdata : pytsg.parse_tsg.TSG
+        TSG dataset loaded with pytsg.
+
+    Returns
+    -------
+    xarray.Dataset
+        Dataset containing the RGB imagery.
+    """
+    section_depths = (
+        tsgdata.nir.sampleheaders[["T", "L", "D"]]
+        .apply(pd.to_numeric)
+        .groupby(["T", "L"])
+        .agg(["min", "max"])
+        .values
+    )
+
+    depths = interpolate_section_depths(
+        section_depths, [t.nlines for t in tsgdata.cras.section]
+    )
+    dx = dy = np.median(np.diff(depths[:200]))
+    horizontal = np.arange(0, tsgdata.cras.image.shape[1]) * dy
+    horizontal -= horizontal.mean()
+    cras = xarray.DataArray(
+        tsgdata.cras.image,
+        coords={
+            "depth": ("sample", depths),
+            "horizontal": horizontal,
+            "channel": list("RGB"),
+        },
+        dims=("sample", "horizontal", "channel"),
+        name="Image",
+    )
+    return cras[::subsample, ::subsample].to_dataset(name="RGB")
+
+
 def load_tsg(
     directory,
     spectra="NIR",
@@ -80,8 +122,26 @@ def load_tsg(
     tsgdata = pytsg.parse_tsg.read_package(directory, read_cras_file=image, **kwargs)
     dataset = tsg_to_xarray(tsgdata, spectra, index_coord=index_coord)
     if image:
-        dataset["Image"] = cras_to_dataarray(tsgdata, subsample=subsample_image)
-    dataset = reorder_variables(dataset)
+        dataset["Image"] = cras_to_dataset(tsgdata, subsample=subsample_image)
+        if (  # where evenly divisible by the subsample, we can assign sample-based coords
+            124 % subsample_image == 0 and index_coord != "depth"
+        ):
+            pixels_per_sample = (
+                dataset["Image"].coords["depth"].size / dataset.Spectra.sample.size
+            )
+            assert np.isclose(
+                int(pixels_per_sample), pixels_per_sample
+            )  # should be an even number
+            pixels_per_sample = int(pixels_per_sample)
+            # the image will have its own depth but otherwise the sample coords should transfer
+            _crds = {
+                k: ("sample", np.repeat(v.values, pixels_per_sample))
+                if k != "sample"
+                else np.repeat(v.values, pixels_per_sample)
+                for k, v in dataset.Spectra.coords.items()
+                if (k == "sample" or v.dims[0] == "sample") and k != "depth"
+            }
+            dataset["Image"]["RGB"] = dataset["Image"]["RGB"].assign_coords(_crds)
     return dataset
 
 
@@ -101,7 +161,7 @@ def tsg_to_xarray(tsgdata, spectra, index_coord="sample"):
 
     Returns
     -------
-    xarray.Dataset
+    xarray.DataTree
         Dataset containing spectra and band headers.
 
     Todo
@@ -114,6 +174,13 @@ def tsg_to_xarray(tsgdata, spectra, index_coord="sample"):
     assert hasattr(
         spectraldata, "spectra"
     ), "TSG Dataset does not have {} data.".format(spectra)
+    _coords = coords_from_sampleheaders(spectraldata)
+    _sample_coords = {
+        k: v
+        for k, v in _coords.items()
+        if k == "sample" or (isinstance(v, tuple) and v[0] == "sample")
+    }
+
     scalar_data = spectraldata.scalars.copy()
     floatvals = scalar_data.select_dtypes(float).columns
     scalar_data[floatvals] = np.where(
@@ -122,10 +189,11 @@ def tsg_to_xarray(tsgdata, spectra, index_coord="sample"):
         scalar_data.loc[:, floatvals.values],
     )
     # could drop emtpy columns but is unlikely to be many
-    dataset = scalar_data.set_index(
+    products = scalar_data.set_index(
         pd.Series(scalar_data.index.values, name="sample")
     ).to_xarray()
-    dataset.attrs.update(
+    #TODO: some of these attributes could be propagated to other parts of the dataset
+    products.attrs.update(
         {
             ch.name: [(i, v) for i, v in ch.classes.items()]
             for id, ch in spectraldata.classes.items()
@@ -134,57 +202,64 @@ def tsg_to_xarray(tsgdata, spectra, index_coord="sample"):
 
     for grp in ["Centre", "Depth", "Width"]:
         arr = (
-            dataset[[v for v in dataset.data_vars if re.match(grp + "\d+", v)]]
+            products[[v for v in products.data_vars if re.match(grp + "\d+", v)]]
             .to_array()
             .rename({"variable": "feature"})
         )
-        dataset = dataset[
-            [v for v in dataset.data_vars if v not in arr.coords["feature"]]
+        products = products[
+            [v for v in products.data_vars if v not in arr.coords["feature"]]
         ]
         arr["feature"] = [f.replace(grp, "") for f in arr["feature"].values]
         arr = xarray.where(arr == 0, np.nan, arr)
         arr.attrs = {}
 
-        dataset[grp + "s"] = arr
-
+        products[grp + "s"] = arr
     # convert traynames, otherwise occasionally converted to integers
-    dataset["Tray"] = dataset["Tray"].astype("<U16")
+    products["Tray"] = products["Tray"].astype("<U16")
+    products = reorder_variables(products)
+    #################################################################################
     # add the spectra, and move it to the top of the variable list
-    coords = coords_from_sampleheaders(spectraldata)
-    specarr = xarray.DataArray(
-        spectraldata.spectra, coords=coords, dims=("sample", "wavelength")
-    )
+    spectra_ds = xarray.DataArray(
+        spectraldata.spectra,
+        coords=_coords,
+        dims=("sample", "wavelength"),
+    ).to_dataset(name="Spectra")
+    #################################################################################
+    # add the lidar data, sort out indexing
     if index_coord != "depth":
         if tsgdata.lidar is not None:
-            profilometer = xarray.DataArray(
-                tsgdata.lidar, coords={"sample": specarr.sample.values}
-            )
+            profilometer_ds = xarray.DataArray(
+                tsgdata.lidar, coords={"sample": spectra_ds.sample.values}
+            ).to_dataset(name="Lidar")
         else:
-            profilometer = None
+            profilometer_ds = None
         # alternate method for being able to index on depth for spectral without
         # dropping rows
-        # specarr = specarr.set_xindex('holedepth')
+        # specarr = specarr.set_xindex('depth')
     else:
         # remove samples where the depth is a duplicate, and sort by depth
         # to allow depth as an index
-        fltr = pd.Series(specarr.holedepth).duplicated().values
-        specarr = specarr.sel(sample=~fltr)
+        fltr = pd.Series(spectra_ds.depth).duplicated().values
+        spectra_ds = spectra_ds.sel(sample=~fltr)
 
-        sortidx = np.argsort(specarr.holedepth.values)
-        specarr = specarr[sortidx].swap_dims({"sample": "holedepth"})
+        sortidx = np.argsort(spectra_ds.depth.values)
+        spectra_ds["Spectra"] = spectra_ds["Spectra"][sortidx].swap_dims(
+            {"sample": "depth"}
+        )
 
         if tsgdata.lidar is not None:
-            profilometer = xarray.DataArray(
+            profilometer_ds = xarray.DataArray(
                 tsgdata.lidar[~fltr][sortidx],
-                coords={"holedepth": specarr.holedepth.values},
-            )
+                coords={"depth": spectra_ds.depth.values},
+            ).to_dataset(name="Lidar")
         else:
-            profilometer = None
+            profilometer_ds = None
 
-    dataset["Spectra"] = specarr
-    if profilometer is not None:
-        dataset["Lidar"] = profilometer
-    dataset = dataset[["Spectra"] + [v for v in dataset.data_vars if v != "Spectra"]]
+    dataset = xarray.DataTree.from_dict(
+        {"Spectra": spectra_ds, "Products": products.assign_coords(_sample_coords)}
+    )
+    if profilometer_ds is not None:
+        dataset["Lidar"] = profilometer_ds.assign_coords(_sample_coords)
     return dataset
 
 
@@ -211,7 +286,7 @@ def coords_from_sampleheaders(spectraldata):
             "T": "tray",
             "L": "section",
             "P": "section-part",
-            "D": "holedepth",  # holedepth here as we can't easily deal with two depth indexes
+            "D": "depth",
             "X": "section-position",
             "H": "hole",
         }
@@ -232,42 +307,6 @@ def coords_from_sampleheaders(spectraldata):
     return coords
 
 
-def cras_to_dataarray(tsgdata, subsample=10):
-    """
-    Get the high resolution imagery from a TSG file, and optionally subsample it
-    to a lower resolution.
-
-    Parameters
-    ----------
-    tsgdata : pytsg.parse_tsg.TSG
-        TSG dataset loaded with pytsg.
-
-    Returns
-    -------
-    xarray.DataArray
-        Array containing the RGB imagery.
-    """
-    section_depths = (
-        tsgdata.nir.sampleheaders[["T", "L", "D"]]
-        .apply(pd.to_numeric)
-        .groupby(["T", "L"])
-        .agg(["min", "max"])
-        .values
-    )
-
-    depths = interpolate_section_depths(
-        section_depths, [t.nlines for t in tsgdata.cras.section]
-    )
-    dx = dy = np.median(np.diff(depths[:200]))
-    horizontal = np.arange(0, tsgdata.cras.image.shape[1]) * dy
-    horizontal -= horizontal.mean()
-    cras = xarray.DataArray(
-        tsgdata.cras.image,
-        coords={"depth": depths, "horizontal": horizontal, "channel": list("RGB")},
-    )
-    return cras[::subsample, ::subsample]
-
-
 def reorder_variables(
     ds,
     drop=[],  # ["Tray", "Section", "Depth (m)", "SecDist (mm)", "TraySamp", "SecSamp"],
@@ -285,8 +324,7 @@ def reorder_variables(
 ):
     """
     Reorder the variables within an Xarray dataset containing TSG data such that
-    it's more easily visually navigated (note this does not persist upon
-    serialization).
+    it's more easily visually navigated (note this does not persist upon serialization).
 
     Parameters
     ----------
@@ -310,9 +348,6 @@ def reorder_variables(
             "Depth (m)",
             "Tray",
             "Section",
-            "Spectra",
-            "Image",
-            "Lidar",
             "Centres",
             "Depths",
             "Widths",
