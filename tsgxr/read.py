@@ -203,7 +203,7 @@ def tsg_to_xarray(tsgdata, spectra, index_coord="sample"):
 
     for grp in ["Centre", "Depth", "Width"]:
         arr = (
-            products[[v for v in products.data_vars if re.match(grp + "\d+", v)]]
+            products[[v for v in products.data_vars if re.match(grp + r"\d+", v)]]
             .to_array()
             .rename({"variable": "feature"})
         )
@@ -282,7 +282,7 @@ def coords_from_sampleheaders(spectraldata):
         the corresponding index coordinate.
     """
     sampleheaders = spectraldata.sampleheaders.apply(
-        pd.to_numeric, errors="ignore"
+        pd.to_numeric, errors="coerce"
     ).rename(
         columns={
             "sample": "sample",
@@ -314,10 +314,10 @@ def reorder_variables(
     ds,
     drop=[],  # ["Tray", "Section", "Depth (m)", "SecDist (mm)", "TraySamp", "SecSamp"],
     patterns=[
-        "Grp\d*",
-        "Min\d*",
-        "Wt\d*",
-        "Error\d*",
+        r"Grp\d*",
+        r"Min\d*",
+        r"Wt\d*",
+        r"Error\d*",
         "SNR",
         "NIL_Stat",
         "Cust",
