@@ -228,6 +228,7 @@ def tsg_to_xarray(tsgdata, spectra, index_coord="sample"):
     #################################################################################
     # add the lidar data, sort out indexing
     if index_coord != "depth":
+        # TODO: add depth as a secondary coordinate to this
         if tsgdata.lidar is not None:
             profilometer_ds = xarray.DataArray(
                 tsgdata.lidar, coords={"sample": spectra_ds.sample.values}
@@ -281,9 +282,7 @@ def coords_from_sampleheaders(spectraldata):
         Mapping of coordinate names to values, and in the case of non-index coordinates
         the corresponding index coordinate.
     """
-    sampleheaders = spectraldata.sampleheaders.apply(
-        pd.to_numeric, errors="coerce"
-    ).rename(
+    sampleheaders = spectraldata.sampleheaders.rename(
         columns={
             "sample": "sample",
             "T": "tray",
@@ -294,6 +293,12 @@ def coords_from_sampleheaders(spectraldata):
             "H": "hole",
         }
     )
+    for k in sampleheaders.columns: # try to convert numeric data
+        try:
+            sampleheaders[k] = sampleheaders[k].apply(pd.to_numeric)
+        except ValueError:
+            pass
+
     # note that depths can be duplicated, so would need to be
     # post-processed to be used as an index
     coords = {
