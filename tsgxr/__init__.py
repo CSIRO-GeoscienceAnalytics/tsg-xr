@@ -1,9 +1,6 @@
-from pathlib import Path 
+from pathlib import Path
 
-from . import _version
-
-__version__ = _version.get_versions()["version"]
-
+from . import __version__
 from .read import load_tsg
 
 
@@ -26,6 +23,9 @@ def find_TSG_datasets(parent_directory):
     return {
         fpath.stem.replace("_tsg", ""): fpath.parent
         for fpath in sorted(
-            set(list(Path(parent_directory).glob("**/*_tsg.tsg")) + list(Path(parent_directory).glob("**/*_tsg_tir.tsg")))
+            set(
+                list(Path(parent_directory).glob("**/*_tsg.tsg"))
+                + list(Path(parent_directory).glob("**/*_tsg_tir.tsg"))
+            )
         )
     }
