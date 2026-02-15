@@ -21,7 +21,6 @@ dependencies = [
 ]
 keywords = ["TSG", "spectra"]
 dynamic = ["version", "readme"]
-license = { text = "MIT License" }
 
 [tool.setuptools]
 packages = ['tsgxr']
