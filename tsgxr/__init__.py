@@ -1,6 +1,6 @@
 from pathlib import Path
 
-from . import __version__
+from ._version import __version__  # noqa: F401
 from .read import load_tsg
 
 
