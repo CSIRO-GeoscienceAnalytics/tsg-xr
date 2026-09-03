@@ -215,21 +215,20 @@ def tsg_to_xarray(tsgdata, index_coord="sample", chunks=None):
             products = reorder_variables(products)
             #################################################################################
             # add the spectra, and move it to the top of the variable list
-            spectra_ds = (
-                xarray.DataArray(
-                    spectraldata.spectra,
-                    coords=_coords,
-                    dims=("sample", "wavelength"),
-                )
-                .to_dataset(name=spectra.upper())
-                .chunk(
+            spectra_ds = xarray.DataArray(
+                spectraldata.spectra,
+                coords=_coords,
+                dims=("sample", "wavelength"),
+            ).to_dataset(name=spectra.upper())
+            if chunks:
+                spectra_ds = spectra_ds.chunk(
                     chunks
-                    if (isinstance(chunks, int) or not chunks)
+                    if isinstance(chunks, int)
                     else {
                         k: v for k, v in chunks.items() if k in ("sample", "wavelength")
                     }
                 )
-            )
+
             # TODO: do we need to make sample a surrogate of depth here,
             # rather than depth being an independently indexed coordinate?
             if index_coord == "depth":
