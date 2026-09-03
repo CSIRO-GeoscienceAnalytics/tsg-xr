@@ -70,7 +70,7 @@ def cras_to_dataset(tsgdata, subsample=10):
     depths = interpolate_section_depths(
         section_depths, [t.nlines for t in tsgdata.cras.section]
     )
-    dx = dy = np.median(np.diff(depths[:200]))
+    _dx = dy = np.median(np.diff(depths[:200]))
     horizontal = np.arange(0, tsgdata.cras.image.shape[1]) * dy
     horizontal -= horizontal.mean()
     cras = xarray.DataArray(
@@ -171,9 +171,9 @@ def tsg_to_xarray(tsgdata, spectra, index_coord="sample"):
     * Consider dropping SecDist (mm), TraySamp, SecSamp and NumFeats - they can be calculated.
     """
     spectraldata = getattr(tsgdata, spectra.lower())
-    assert hasattr(
-        spectraldata, "spectra"
-    ), "TSG Dataset does not have {} data.".format(spectra)
+    assert hasattr(spectraldata, "spectra"), (
+        f"TSG Dataset does not have {spectra} data."
+    )
     _coords = coords_from_sampleheaders(spectraldata)
     _sample_coords = {
         k: v
@@ -293,7 +293,7 @@ def coords_from_sampleheaders(spectraldata):
             "H": "hole",
         }
     )
-    for k in sampleheaders.columns: # try to convert numeric data
+    for k in sampleheaders.columns:  # try to convert numeric data
         try:
             sampleheaders[k] = sampleheaders[k].apply(pd.to_numeric)
         except ValueError:
@@ -318,17 +318,7 @@ def coords_from_sampleheaders(spectraldata):
 def reorder_variables(
     ds,
     drop=[],  # ["Tray", "Section", "Depth (m)", "SecDist (mm)", "TraySamp", "SecSamp"],
-    patterns=[
-        r"Grp\d*",
-        r"Min\d*",
-        r"Wt\d*",
-        r"Error\d*",
-        "SNR",
-        "NIL_Stat",
-        "Cust",
-        "Bound_Water",
-        "Unbound_Water",
-    ],
+    patterns=None,
 ):
     """
     Reorder the variables within an Xarray dataset containing TSG data such that
@@ -348,6 +338,18 @@ def reorder_variables(
     ds : xarray.Dataset
         Reordered dataset.
     """
+    if patterns is None:
+        patterns = [
+            r"Grp\d*",
+            r"Min\d*",
+            r"Wt\d*",
+            r"Error\d*",
+            "SNR",
+            "NIL_Stat",
+            "Cust",
+            "Bound_Water",
+            "Unbound_Water",
+        ]
     arrangement = [
         v
         for v in [
@@ -370,12 +372,10 @@ def reorder_variables(
     ]
 
     others = sorted(
-        list(
-            set(
-                [v for v in ds.data_vars if (v not in arrangement)]
-                + ["Flags"]
-                + [v for v in ds.data_vars if v.lower() == v]
-            )
+        set(
+            [v for v in ds.data_vars if (v not in arrangement)]
+            + ["Flags"]
+            + [v for v in ds.data_vars if v.lower() == v]
         )
     )
     ds = ds[

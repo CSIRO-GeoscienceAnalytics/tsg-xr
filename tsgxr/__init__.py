@@ -3,6 +3,8 @@ from pathlib import Path
 from ._version import __version__  # noqa: F401
 from .read import load_tsg
 
+__all__ = ["load_tsg", "find_TSG_datasets", "__version__"]
+
 
 def find_TSG_datasets(parent_directory):
     """

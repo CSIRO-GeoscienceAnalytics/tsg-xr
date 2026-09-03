@@ -1,7 +1,6 @@
 from pathlib import Path
 
 import typer
-import xarray
 
 try:
     from tqdm.auto import tqdm
@@ -11,9 +10,8 @@ except ImportError:
         return iterable
 
 
-from .util import Handle
 from . import __version__, find_TSG_datasets, load_tsg
-
+from .util import Handle
 
 logger = Handle(__name__, level="INFO")
 
@@ -45,7 +43,8 @@ def TSG2zarr(
         None,
         help="Whether to use logging, and if so what level (DEBUG, INFO)",
     ),
-    zipfile: bool = typer.Option("--zip"
+    zipfile: bool = typer.Option(
+        "--zip",
         True,
         help="Whether to zip the Zarr archive upon creation.",
     ),
@@ -58,24 +57,24 @@ def TSG2zarr(
     if (
         not tsgdir.is_dir() and tsgdir.suffix.lower() == ".tsg"
     ):  # pointing to a specific .tsg file
-        logger.info("Loading TSG file: {}".format(tsgdir.name))
+        logger.info(f"Loading TSG file: {tsgdir.name}")
         spectra = "TIR" if tsgdir.stem.lower().endswith("tir") else "NIR"
         assert tsgdir.exists(), "Specified TSG file does not exist."
         datasets = {tsgdir.stem: tsgdir.parent}
     else:
-        logger.info("Loading TSG files from directory: {}".format(tsgdir.name))
+        logger.info(f"Loading TSG files from directory: {tsgdir.name}")
         assert tsgdir.exists(), "Specified directory does not exist."
         datasets = find_TSG_datasets(tsgdir)
 
     if datasets:
-        logger.info("Found datasets: {}".format(", ".join(k for k in datasets.keys())))
+        logger.info("Found datasets: {}".format(", ".join(k for k in datasets)))
     else:
-        logger.warning("Found no datasets in {}.".format(str(tsgdir.resolve())))
+        logger.warning(f"Found no datasets in {tsgdir.resolve()!s}.")
 
     if datasets:
         for k, d in tqdm(datasets.items()):
             ds = load_tsg(
-                d,  
+                d,
                 spectra=spectra.upper(),
                 image=image,
                 subsample_image=subsample_image,
@@ -86,7 +85,7 @@ def TSG2zarr(
             )
             # put it in the TSG directory if an output folder is not given
             outdir = output_dir if output_dir is not None else d
-            logger.info("Creating Zarr archive {} in {}.".format(name, str(outdir)))
+            logger.info(f"Creating Zarr archive {name} in {outdir!s}.")
             ds.to_zarr(outdir / name, mode="w")  # overwrite if needed
 
 

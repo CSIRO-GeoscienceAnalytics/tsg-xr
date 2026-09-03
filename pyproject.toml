@@ -1,5 +1,5 @@
 [build-system]
-requires = ["setuptools>=80", "setuptools-scm[simple]>=8"]
+requires = ["setuptools>=80", "setuptools-scm>=8"]
 build-backend = "setuptools.build_meta"
 
 [project]
@@ -18,6 +18,7 @@ dependencies = [
   "pandas",
   "pytsg>=0.2.8",
   "typer",
+  "joblib"
 ]
 keywords = ["TSG", "spectra"]
 dynamic = ["version", "readme"]
@@ -32,8 +33,13 @@ issues = "https://github.com/CSIRO-GeoscienceAnalytics/tsg-xr/issues"
 [project.scripts]
 tsgxr = "tsgxr.cli:app"
 
+[project.entry-points."xarray.backends"]
+lazycras = "tsgxr.xarray_plugin:LazyCRASBackend"
+cras = "tsgxr.xarray_plugin:CRASBackend"
+
 
 [project.optional-dependencies]
+dask = ["dask"]
 plot = ["matplotlib"]
 docs = [
   "sphinx_rtd_theme",
@@ -46,7 +52,7 @@ docs = [
   "ipykernel",                 # for nbsphinx to find a kernel
 ]
 test = ["pytest", "pytest-cov", "coverage"]
-dev = ["build", "ruff", "twine", "tsg-xr[plot,test,docs]"]
+dev = ["build", "ruff", "twine", "tsg-xr[plot,dask,test,docs]"]
 
 [tool.setuptools.dynamic]
 readme = { file = "README.md", content-type = "text/markdown" }
