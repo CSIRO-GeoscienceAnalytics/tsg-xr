@@ -99,8 +99,18 @@ def load_tsg(
             ds = ds.assign_coords(depth=("x", depths), width=("y", horizontal))
             DT["Image"] = ds
 
-            #  we can assign sample-based coords
-            if index_coord != "depth":
+            if index_coord == "depth":
+                # there are no duplicate depths in the image, so we dont' need to deduplicate this
+                # TODO: assign sample-based coordinates as per depth ranges in the deduplicated sample spectra image
+                DT["Image"]["Image"] = (
+                    DT["Image"]["Image"]
+                    .swap_dims({"x": "depth"})
+                    .swap_dims({"y": "width"})
+                    .sortby("depth")
+                )
+
+            else:
+                #  we can assign sample-based coords
                 spectra_key = next(k for k in ["NIR", "MIR", "TIR"] if k in DT)
                 spectra_ds = getattr(DT, spectra_key)  # subset not implemented
                 pixels_per_sample = (
@@ -148,6 +158,9 @@ def tsg_to_xarray(tsgdata, index_coord="sample", chunks=None):
     * Consider dropping Tray, Section, Depth (m) as they're duplicated as indexes.
     * Consider dropping SecDist (mm), TraySamp, SecSamp and NumFeats - they can be calculated.
     """
+    if chunks is None:
+        chunks = {}
+
     DT = xarray.DataTree()
 
     for spectra in ["nir", "mir", "tir"]:
@@ -159,11 +172,6 @@ def tsg_to_xarray(tsgdata, index_coord="sample", chunks=None):
                 for k, v in _coords.items()
                 if k == "sample" or (isinstance(v, tuple) and v[0] == "sample")
             }
-            _chunks = (
-                chunks
-                if isinstance(chunks, int)
-                else {k: v for k, v in chunks.items() if k in _coords}
-            )
             scalar_data = spectraldata.scalars.copy()
             floatvals = scalar_data.select_dtypes(float).columns
             scalar_data[floatvals] = np.where(
@@ -216,50 +224,50 @@ def tsg_to_xarray(tsgdata, index_coord="sample", chunks=None):
                 .to_dataset(name=spectra.upper())
                 .chunk(
                     chunks
-                    if (isinstance(chunks, int) or chunks is None)
+                    if (isinstance(chunks, int) or not chunks)
                     else {
                         k: v for k, v in chunks.items() if k in ("sample", "wavelength")
                     }
                 )
             )
+            # TODO: do we need to make sample a surrogate of depth here,
+            # rather than depth being an independently indexed coordinate?
+            if index_coord == "depth":
+                # remove samples where the depth is a duplicate, and sort by depth
+                # to allow depth as an index
+                fltr = pd.Series(spectra_ds.depth).duplicated().values
+                spectra_ds = spectra_ds.sel(sample=~fltr)
+                sortidx = np.argsort(spectra_ds.depth.values)
+                spectra_ds = (
+                    spectra_ds.isel(sample=sortidx)
+                    .swap_dims({"sample": "depth"})
+                    .sortby("depth")
+                )
+                products = (
+                    products.isel(sample=sortidx)
+                    .swap_dims({"sample": "depth"})
+                    .sortby("depth")
+                )
             DT[spectra.upper()] = spectra_ds
             DT[spectra.upper() + "_Products"] = products.assign_coords(_sample_coords)
     #################################################################################
     # add the lidar data, sort out indexing
-    if index_coord != "depth":
-        # TODO: add depth as a secondary coordinate to this
-        if tsgdata.lidar is not None:
+    if tsgdata.lidar is not None:
+        if index_coord != "depth":
+            # TODO: add depth as a secondary coordinate to this
             profilometer_ds = xarray.DataArray(
                 tsgdata.lidar, coords={"sample": spectra_ds.sample.values}
             ).to_dataset(name="Lidar")
+            # alternate method for being able to index on depth for spectral without
+            # dropping rows
+            # specarr = specarr.set_xindex('depth')
         else:
-            profilometer_ds = None
-        # alternate method for being able to index on depth for spectral without
-        # dropping rows
-        # specarr = specarr.set_xindex('depth')
-    else:
-        # remove samples where the depth is a duplicate, and sort by depth
-        # to allow depth as an index
-        fltr = pd.Series(spectra_ds.depth).duplicated().values
-        spectra_ds = spectra_ds.sel(sample=~fltr)
-
-        sortidx = np.argsort(spectra_ds.depth.values)
-        # TODO: do we need to make sample a surrogate of depth here,
-        # rather than depth being an independently indexed coordinate?
-        spectra_ds["Spectra"] = spectra_ds["Spectra"][sortidx].swap_dims(
-            {"sample": "depth"}
-        )
-
-        if tsgdata.lidar is not None:
             profilometer_ds = xarray.DataArray(
                 tsgdata.lidar[~fltr][sortidx],
                 coords={"depth": spectra_ds.depth.values},
             ).to_dataset(name="Lidar")
-        else:
-            profilometer_ds = None
-
-    if profilometer_ds is not None:
         DT["Lidar"] = profilometer_ds.assign_coords(_sample_coords)
+
     return DT
 
 

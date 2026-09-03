@@ -158,6 +158,7 @@ class CRASBackend(xarray.backends.BackendEntrypoint):
                         ]
                     ),
                 ),
+                "channel": np.arange(3),
             },
         )
         da.attrs.update(
@@ -183,6 +184,8 @@ class CRASBackendArray(xarray.backends.BackendArray):
     ):
         self.filename_or_obj = filename_or_obj
         self.lock = lock
+        if chunks is None:
+            chunks = {}
         with self.lock, open(self.filename_or_obj, "rb") as file:
             self.header = CrasHeader(*struct.unpack(header_format, file.read(64)))
             file.seek(64)
@@ -271,7 +274,7 @@ class CRASBackendArray(xarray.backends.BackendArray):
             arr,
             dims=("x", "y", "channel"),
             coords={
-                "x": np.arange(arr.shape[0]) + self.header.chunksize * chunkidx_start
+                "x": np.arange(arr.shape[0]) + self.header.chunksize * chunkidx_start,
             },
         )
         if isinstance(key, int):
@@ -293,9 +296,10 @@ class LazyCRASBackend(xarray.backends.BackendEntrypoint):
         *,
         drop_variables=None,
         dtype=np.int8,
-        chunks=1,
+        chunks=None,
     ) -> xarray.Dataset:
-
+        if chunks is None:
+            chunks = {}
         backend_array = CRASBackendArray(
             filename_or_obj=filename_or_obj, lock=get_lock()
         )
@@ -321,6 +325,7 @@ class LazyCRASBackend(xarray.backends.BackendEntrypoint):
                         ]
                     ),
                 ),
+                "channel": np.arange(3),
             },
         )
         da.attrs.update(
