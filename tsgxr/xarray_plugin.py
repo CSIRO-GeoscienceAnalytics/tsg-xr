@@ -14,15 +14,26 @@ try:
         return dask.utils.SerializableLock()
 
 except ImportError:
+    # TODO: Could use threading.lock on linux, there are alternates on windows
+    from contextlib import contextmanager
 
     def get_lock():
-        return None
+        @contextmanager
+        def mgr():
+            try:
+                yield None
+            finally:
+                pass
+
+        return mgr()
 
 
 class CRASBackend(xarray.backends.BackendEntrypoint):
     """
     A parallel-loading backend to open TSG truecolor imagery.
     """
+
+    description = "Load TSG truecolor imagery using xarray"
 
     def open_dataset(
         self,
@@ -32,9 +43,9 @@ class CRASBackend(xarray.backends.BackendEntrypoint):
         section_info_format: str = "4f3i",
         drop_variables=None,
         lock=None,
-    ):
+    ) -> xarray.Dataset:
         self.filename_or_obj = filename_or_obj
-        self.lock = lock or dask.utils.SerializableLock()
+        self.lock = lock or get_lock()
         with self.lock, open(self.filename_or_obj, "rb") as file:
             self.header = CrasHeader(*struct.unpack(header_format, file.read(64)))
             file.seek(64)
@@ -81,10 +92,10 @@ class CRASBackend(xarray.backends.BackendEntrypoint):
 
             cras = np.vstack(
                 list(
-                    joblib.Parallel(n_jobs=-1)(
+                    joblib.Parallel(
+                        n_jobs=-1, backend="threading", return_as="generator"
+                    )(
                         (joblib.delayed(get_img)(*d) for d in datas),
-                        total=len(datas),
-                        backend="threading",
                     )
                 )
             )
@@ -113,21 +124,48 @@ class CRASBackend(xarray.backends.BackendEntrypoint):
             ).astype(np.uint64)
             file.seek(info_table_start)
 
-            tray: list[TrayInfo] = []
+            self.tray: list[TrayInfo] = []
             for i in range(self.header.ntrays):
                 bytes = file.read(20)
-                tray.append(TrayInfo(*struct.unpack(tray_info_format, bytes)))
+                self.tray.append(TrayInfo(*struct.unpack(tray_info_format, bytes)))
 
-            section: list[SectionInfo] = []
+            self.section: list[SectionInfo] = []
             for i in range(self.header.nsections):
                 bytes = file.read(28)
-                section.append(SectionInfo(*struct.unpack(section_info_format, bytes)))
+                self.section.append(
+                    SectionInfo(*struct.unpack(section_info_format, bytes))
+                )
 
-        return xarray.Dataset(
-            {"Image": xarray.Variable(data=cras, dims=("x", "y", "channel"))}
+        da = xarray.DataArray(
+            data=cras,
+            dims=("x", "y", "channel"),
+            coords={
+                "section": (
+                    "x",
+                    np.hstack(
+                        [
+                            np.ones(s.nlines, dtype="int32") * ix
+                            for ix, s in enumerate(self.section)
+                        ]
+                    ),
+                ),
+                "tray": (
+                    "x",
+                    np.hstack(
+                        [
+                            np.ones(s.nlines, dtype="int32") * ix
+                            for ix, s in enumerate(self.tray)
+                        ]
+                    ),
+                ),
+            },
         )
+        da.attrs.update(
+            {"tray": self.tray, "section": self.section},
+        )
+        return xarray.Dataset({"Image": da})
 
-    def guess_can_open(self, filename_or_obj):
+    def guess_can_open(self, filename_or_obj: str | Path) -> bool:
         return Path(filename_or_obj).name.endswith("cras.bip")
 
 
@@ -173,15 +211,17 @@ class CRASBackendArray(xarray.backends.BackendArray):
             ).astype(np.uint64)
             file.seek(info_table_start)
 
-            tray: list[TrayInfo] = []
+            self.tray: list[TrayInfo] = []
             for i in range(self.header.ntrays):
                 bytes = file.read(20)
-                tray.append(TrayInfo(*struct.unpack(tray_info_format, bytes)))
+                self.tray.append(TrayInfo(*struct.unpack(tray_info_format, bytes)))
 
-            section: list[SectionInfo] = []
+            self.section: list[SectionInfo] = []
             for i in range(self.header.nsections):
                 bytes = file.read(28)
-                section.append(SectionInfo(*struct.unpack(section_info_format, bytes)))
+                self.section.append(
+                    SectionInfo(*struct.unpack(section_info_format, bytes))
+                )
 
         self.shape = (self.header.nl, self.header.ns, self.header.nb)
         self.imgshape = (self.header.chunksize, self.header.ns, self.header.nb)
@@ -231,9 +271,7 @@ class CRASBackendArray(xarray.backends.BackendArray):
             arr,
             dims=("x", "y", "channel"),
             coords={
-                "x": np.arange(arr.shape[0]) + self.header.chunksize * chunkidx_start,
-                "y": np.arange(arr.shape[1]),
-                "channel": np.arange(3),
+                "x": np.arange(arr.shape[0]) + self.header.chunksize * chunkidx_start
             },
         )
         if isinstance(key, int):
@@ -247,6 +285,8 @@ class LazyCRASBackend(xarray.backends.BackendEntrypoint):
     A lazy loading backend to open TSG truecolor imagery.
     """
 
+    description = "Open and lazy-load TSG truecolor imagery using xarray"
+
     def open_dataset(
         self,
         filename_or_obj,
@@ -254,19 +294,39 @@ class LazyCRASBackend(xarray.backends.BackendEntrypoint):
         drop_variables=None,
         dtype=np.int8,
         chunks=1,
-    ):
+    ) -> xarray.Dataset:
 
         backend_array = CRASBackendArray(
             filename_or_obj=filename_or_obj, lock=get_lock()
         )
-        return xarray.Dataset(
-            {
-                "Image": xarray.DataArray(
-                    dims=("x", "y", "channel"),
-                    data=xarray.core.indexing.LazilyIndexedArray(backend_array),
-                )
-            }
+        da = xarray.DataArray(
+            data=xarray.core.indexing.LazilyIndexedArray(backend_array),
+            dims=("x", "y", "channel"),
+            coords={
+                "section": (
+                    "x",
+                    np.hstack(
+                        [
+                            np.ones(s.nlines, dtype="int32") * ix
+                            for ix, s in enumerate(backend_array.section)
+                        ]
+                    ),
+                ),
+                "tray": (
+                    "x",
+                    np.hstack(
+                        [
+                            np.ones(s.nlines, dtype="int32") * ix
+                            for ix, s in enumerate(backend_array.tray)
+                        ]
+                    ),
+                ),
+            },
         )
+        da.attrs.update(
+            {"tray": backend_array.tray, "section": backend_array.section},
+        )
+        return xarray.Dataset({"Image": da})
 
-    def guess_can_open(self, filename_or_obj):
+    def guess_can_open(self, filename_or_obj: str | Path) -> bool:
         return Path(filename_or_obj).name.endswith("cras.bip")

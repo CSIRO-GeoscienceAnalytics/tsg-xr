@@ -1,9 +1,9 @@
 from pathlib import Path
 
-from ._version import __version__  # noqa: F401
+from ._version import __version__
 from .read import load_tsg
 
-__all__ = ["load_tsg", "find_TSG_datasets", "__version__"]
+__all__ = ["__version__", "find_TSG_datasets", "load_tsg"]
 
 
 def find_TSG_datasets(parent_directory):

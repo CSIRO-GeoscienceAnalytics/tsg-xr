@@ -19,6 +19,7 @@ dependencies = [
   "pytsg>=0.2.8",
   "typer",
   "joblib"
+  
 ]
 keywords = ["TSG", "spectra"]
 dynamic = ["version", "readme"]
@@ -41,6 +42,7 @@ cras = "tsgxr.xarray_plugin:CRASBackend"
 [project.optional-dependencies]
 dask = ["dask"]
 plot = ["matplotlib"]
+notebook = ["matplotlib", 'ipykernel']
 docs = [
   "sphinx_rtd_theme",
   "docutils",
@@ -52,7 +54,7 @@ docs = [
   "ipykernel",                 # for nbsphinx to find a kernel
 ]
 test = ["pytest", "pytest-cov", "coverage"]
-dev = ["build", "ruff", "twine", "tsg-xr[plot,dask,test,docs]"]
+dev = ["build", "ruff", "twine", "tsg-xr[notebook,dask,test,docs]"]
 
 [tool.setuptools.dynamic]
 readme = { file = "README.md", content-type = "text/markdown" }

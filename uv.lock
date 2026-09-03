@@ -3141,6 +3141,10 @@ docs = [
     { name = "sphinx-gallery" },
     { name = "sphinx-rtd-theme" },
 ]
+notebook = [
+    { name = "ipykernel" },
+    { name = "matplotlib" },
+]
 plot = [
     { name = "matplotlib" },
 ]
@@ -3157,7 +3161,9 @@ requires-dist = [
     { name = "dask", marker = "extra == 'dask'" },
     { name = "docutils", marker = "extra == 'docs'" },
     { name = "ipykernel", marker = "extra == 'docs'" },
+    { name = "ipykernel", marker = "extra == 'notebook'" },
     { name = "joblib" },
+    { name = "matplotlib", marker = "extra == 'notebook'" },
     { name = "matplotlib", marker = "extra == 'plot'" },
     { name = "myst-parser", marker = "extra == 'docs'" },
     { name = "nbsphinx", marker = "extra == 'docs'" },
@@ -3171,13 +3177,13 @@ requires-dist = [
     { name = "sphinx-autodoc-annotation", marker = "extra == 'docs'" },
     { name = "sphinx-gallery", marker = "extra == 'docs'" },
     { name = "sphinx-rtd-theme", marker = "extra == 'docs'" },
-    { name = "tsg-xr", extras = ["dask", "docs", "plot", "test"], marker = "extra == 'dev'" },
+    { name = "tsg-xr", extras = ["dask", "docs", "notebook", "test"], marker = "extra == 'dev'" },
     { name = "twine", marker = "extra == 'dev'" },
     { name = "typer" },
     { name = "xarray", specifier = ">=2024.10" },
     { name = "zarr" },
 ]
-provides-extras = ["dask", "plot", "docs", "test", "dev"]
+provides-extras = ["dask", "plot", "notebook", "docs", "test", "dev"]
 
 [[package]]
 name = "twine"
