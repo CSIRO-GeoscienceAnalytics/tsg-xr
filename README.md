@@ -101,8 +101,8 @@ This repository is set up to use `uv` for environment management, and a `uv.lock
 
 ## Data Structure Overview 
 
-An example of the data structure used is given below, for the `STAVELY_17` hole available from the 
-NVCL:
+An example of the data structure used is given below, for the `STAVELY_17` hole available from the NVCL (note that the choice of index coordinate - between depth and sample - will affect 
+some of this structure's orientation):
 
 ```python
 DT : xarray.DataTree = load_tsg(
