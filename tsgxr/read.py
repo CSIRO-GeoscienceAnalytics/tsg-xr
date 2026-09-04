@@ -215,13 +215,13 @@ def tsg_to_xarray(tsgdata, index_coord="sample", chunks=None):
             products = reorder_variables(products)
             #################################################################################
             # add the spectra, and move it to the top of the variable list
-            spectra_ds = xarray.DataArray(
+            spectra_da = xarray.DataArray(
                 spectraldata.spectra,
                 coords=_coords,
                 dims=("sample", "wavelength"),
-            ).to_dataset(name=spectra.upper())
+            )
             if chunks:
-                spectra_ds = spectra_ds.chunk(
+                spectra_da = spectra_da.chunk(
                     chunks
                     if isinstance(chunks, int)
                     else {
@@ -234,11 +234,11 @@ def tsg_to_xarray(tsgdata, index_coord="sample", chunks=None):
             if index_coord == "depth":
                 # remove samples where the depth is a duplicate, and sort by depth
                 # to allow depth as an index
-                fltr = pd.Series(spectra_ds.depth).duplicated().values
-                spectra_ds = spectra_ds.sel(sample=~fltr)
-                sortidx = np.argsort(spectra_ds.depth.values)
-                spectra_ds = (
-                    spectra_ds.isel(sample=sortidx)
+                fltr = pd.Series(spectra_da.depth).duplicated().values
+                spectra_da = spectra_da.sel(sample=~fltr)
+                sortidx = np.argsort(spectra_da.depth.values)
+                spectra_da = (
+                    spectra_da.isel(sample=sortidx)
                     .swap_dims({"sample": "depth"})
                     .sortby("depth")
                 )
@@ -247,15 +247,21 @@ def tsg_to_xarray(tsgdata, index_coord="sample", chunks=None):
                     .swap_dims({"sample": "depth"})
                     .sortby("depth")
                 )
-            DT[spectra.upper()] = spectra_ds
-            DT[spectra.upper() + "_Products"] = products.assign_coords(_sample_coords)
+
+            DT[spectra.upper()] = xarray.DataTree.from_dict(
+                {
+                    "Spectra": spectra_da.to_dataset(name="Spectra"),
+                    "Products": products.assign_coords(_sample_coords),
+                }
+            )
+
     #################################################################################
     # add the lidar data, sort out indexing
     if tsgdata.lidar is not None:
         if index_coord != "depth":
             # TODO: add depth as a secondary coordinate to this
             profilometer_ds = xarray.DataArray(
-                tsgdata.lidar, coords={"sample": spectra_ds.sample.values}
+                tsgdata.lidar, coords={"sample": spectra_da.sample.values}
             ).to_dataset(name="Lidar")
             # alternate method for being able to index on depth for spectral without
             # dropping rows
@@ -263,7 +269,7 @@ def tsg_to_xarray(tsgdata, index_coord="sample", chunks=None):
         else:
             profilometer_ds = xarray.DataArray(
                 tsgdata.lidar[~fltr][sortidx],
-                coords={"depth": spectra_ds.depth.values},
+                coords={"depth": spectra_da.depth.values},
             ).to_dataset(name="Lidar")
         DT["Lidar"] = profilometer_ds.assign_coords(_sample_coords)
 
