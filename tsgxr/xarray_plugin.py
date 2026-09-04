@@ -4,8 +4,10 @@ from pathlib import Path
 import joblib
 import numpy as np
 import xarray
-from pytsg.parse_tsg import CrasHeader, SectionInfo, TrayInfo
+from pytsg.parse_tsg import CrasHeader, SectionInfo, TrayInfo, read_tsg_bip_pair
 from simplejpeg import decode_jpeg
+
+from .read import spectral_dataset_to_xarray
 
 try:
     import dask
@@ -26,6 +28,44 @@ except ImportError:
                 pass
 
         return mgr()
+
+
+class TSGBIPBackend(xarray.backends.BackendEntrypoint):
+    """
+    An xarray backend to open a single TSG spectral dataset.
+    """
+
+    description = "Load TSG spectral datasets using xarray"
+
+    def open_dataset(
+        self,
+        filename_or_obj,
+        header_format="20s2I8h4I2h",
+        tray_info_format: str = "3f2i",
+        section_info_format: str = "4f3i",
+        drop_variables=None,
+        lock=None,
+    ) -> xarray.Dataset:
+        self.lock = lock or get_lock()
+        fpath = Path(filename_or_obj)
+        hdr, bip = None, None
+        bip = fpath if fpath.suffix == ".bip" else fpath.with_suffix(".bip")
+        tsg = fpath if fpath.suffix == ".tsg" else fpath.with_suffix(".tsg")
+        hdr = next(fpath.parent.glob("*tsg.hdr"))
+        if not bip.exists() and tsg.exists() and hdr.exists():
+            raise FileNotFoundError(
+                f"Missing file: {','.join(([bip.name] if not bip.exists() else []) + ([tsg.name] if not tsg.exists() else []) + ([hdr.name] if not hdr.exists() else []))}"
+            )
+
+        spectra = read_tsg_bip_pair(tsg, bip, "a")
+        return spectral_dataset_to_xarray(spectra)
+
+    def guess_can_open(self, filename_or_obj: str | Path) -> bool:
+
+        fpath = Path(filename_or_obj)
+        return ((fpath.suffix == ".bip") and ("tsg" in fpath.stem)) or (
+            (fpath.suffix == ".tsg") and ("tsg" in fpath.stem)
+        )
 
 
 class CRASBackend(xarray.backends.BackendEntrypoint):
