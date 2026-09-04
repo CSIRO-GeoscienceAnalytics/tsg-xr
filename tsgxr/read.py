@@ -271,7 +271,9 @@ def tsg_to_xarray(tsgdata, index_coord="sample", chunks=None):
                 tsgdata.lidar[~fltr][sortidx],
                 coords={"depth": spectra_da.depth.values},
             ).to_dataset(name="Lidar")
-        DT["Lidar"] = profilometer_ds.assign_coords(_sample_coords)
+        DT["Lidar"] = profilometer_ds.assign_coords(
+            {k: v for k, v in _sample_coords.items() if k != "depth"}
+        )
 
     return DT
 

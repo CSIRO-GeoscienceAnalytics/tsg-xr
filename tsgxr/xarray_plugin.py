@@ -88,7 +88,7 @@ class CRASBackend(xarray.backends.BackendEntrypoint):
             #     del img_data
 
             def get_img(pos, data):
-                return decode_jpeg(data)[::-1]
+                return decode_jpeg(data, colorspace="BGR")[::-1]
 
             cras = np.vstack(
                 list(
