@@ -7,7 +7,7 @@ have been processed with the software) consists of an ensemble of files:
 * Configuration files (principally text, similar in format to TOML)
 * Low resolution core imagery exports (hole overview, per-tray imagery; as JPEG images with associated markup)
 
-`tsg-xr` heavily leverages the filereader of [`pytsg`](https://github.com/FractalGeoAnalytics/pytsg) to 
+`tsg-xr` heavily leverages the filereader of [`pytsg`](https://https://github.com/Geological-Survey-of-Western-Australia/pytsg) to 
 provide access to these data, and presents data in an [Xarray](xarray.pydata.org) format to condense the 
 otherwise complex arrangement. Here `pytsg` provides an efficient interface to the 
 binary components of the TSG file format, and `tsg-xr` is largely just arranging this into a condensed 
