@@ -105,7 +105,7 @@ An example of the data structure used is given below, for the `STAVELY_17` hole 
 NVCL:
 
 ```python
-DT : xarray.DataTre e= load_tsg(
+DT : xarray.DataTree = load_tsg(
     "./07e4dcac-5216-44a6-9a6b-0c4c1f7ce7d", index_coord="depth", lazy=True, chunks=512
 )
 ```
@@ -190,16 +190,24 @@ Group: /
 
 ### Converting TSG files to Zarr
 
-A minimal command line interface exists for converstion of TSG files to Zarr archives. A selection of configuration options are avialable from the commandline, which can be found under the help menu:
+A minimal command line interface exists for converstion of TSG files to Zarr archives. 
+Generally, if you're using `uv`, you would use `uv run` to do this; otherwise you can directly use the `tsgxr` entry point where the respective environment is activated.
+
+A selection of configuration options are avialable from the commandline, which can be found under the help menu:
+
 ```bash
-tsgxr tsg2zarr --help
+uv run tsgxr tsg2zarr --help
 ```
 Basic usage is as follows, where `<Path>` refers to either i) an individual TSG scalars file (`.tsg`), ii) a Hylogger TSG directory, or iii) a directory containing multiple Hylogger TSG directories (multiple datasets can be converted simultaneously):
+
 ```bash
-tsgxr tsg2zarr <Path>
+uv run tsgxr tsg2zarr <Path>
 ```
+
 Outputs are by default added to the Hylogger TSG directories themselves, but can be optionally collated into a separate directory; outputs will use the hole name extracted from the TSG dataset and be specific to the spectra specified (NIR or TIR):
+
 ```bash
-tsgxr tsg2zarr <Path> --output_dir "./collated_zarr_archives/"
+uv run tsgxr tsg2zarr <Path> --output_dir "./collated_zarr_archives/"
 ```
+
 Note that by default, this will create zipped Zarr archives. These can be directly opened in e.g. Xarray.
