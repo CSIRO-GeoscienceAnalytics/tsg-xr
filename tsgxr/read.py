@@ -185,11 +185,41 @@ def load_tsg(
     return DT
 
 
+def reindex_depth(
+    da: xarray.DataArray, template: xarray.Dataset | xarray.DataArray | None = None
+):
+    # remove samples where the depth is a duplicate, and sort by depth
+    # to allow depth as an index
+    if template is None:
+        template = da
+    fltr = pd.Series(template.depth).duplicated().values
+    template = template.sel(sample=~fltr)
+    sortidx = np.argsort(template.depth.values)
+    return da.isel(sample=sortidx).swap_dims({"sample": "depth"}).sortby("depth")
+
+
 def spectral_dataset_to_xarray(
     spectra: pytsg.parse_tsg.Spectra,
     index_coord: str = "sample",
     chunks: dict | int | None = None,
 ) -> xarray.Dataset:
+    """
+    Load a TSG spectral subset into Xarray.
+
+    Parameters
+    ----------
+    spectra  : pytsg.parse_tsg.Spectra
+        TSG spectral dataset loaded with pytsg.
+    index_coord : str
+        Index coordinate to use for the dataset.
+        Using "depth" requires some post-processing and dropping duplicates.
+    chunks : int | dict
+        Chunking to use for the dataset.
+
+    Returns
+    -------
+    xarray.Dataset
+    """
     _coords = coords_from_sampleheaders(spectra)
     _sample_coords = {
         k: v
@@ -240,11 +270,18 @@ def spectral_dataset_to_xarray(
         coords=_coords,
         dims=("sample", "wavelength"),
     )
+    if index_coord == "depth":
+        spectra_da = reindex_depth(spectra_da)
     if chunks:
         spectra_da = spectra_da.chunk(
             chunks
             if isinstance(chunks, int)
-            else {k: v for k, v in chunks.items() if k in ("sample", "wavelength")}
+            else {k: v for k, v in chunks.items() if k in spectra_da.dims}
+        )
+        products = products.chunk(
+            chunks
+            if isinstance(chunks, int)
+            else {k: v for k, v in chunks.items() if k in products.dims}
         )
 
     return products.assign_coords(_sample_coords).assign(Spectra=spectra_da)
@@ -256,7 +293,7 @@ def tsg_to_xarray(
     chunks: dict | int | None = None,
 ) -> xarray.DataTree:
     """
-    Load a TSG spectral subset into Xarray.
+    Load an entire TSG dataset into Xarray.
 
     Parameters
     ----------
@@ -275,7 +312,6 @@ def tsg_to_xarray(
 
     Todo
     -----
-    * Consider indexing by depth instead of sample, after the fact.
     * Consider dropping Tray, Section, Depth (m) as they're duplicated as indexes.
     * Consider dropping SecDist (mm), TraySamp, SecSamp and NumFeats - they can be calculated.
     """
@@ -287,7 +323,7 @@ def tsg_to_xarray(
     for subset in ["nir", "mir", "tir"]:
         if hasattr(tsgdata, subset) and not inspect.isclass(getattr(tsgdata, subset)):
             specds: xarray.Dataset = spectral_dataset_to_xarray(
-                getattr(tsgdata, subset)
+                getattr(tsgdata, subset), index_coord=index_coord, chunks=chunks
             )
             DT[subset.upper()] = xarray.DataTree.from_dict(
                 {
@@ -295,52 +331,27 @@ def tsg_to_xarray(
                     "Products": specds.drop_vars("Spectra").drop_dims("wavelength"),
                 }
             )
-            # TODO: do we need to make sample a surrogate of depth here,
-            # rather than depth being an independently indexed coordinate?
-            if index_coord == "depth":
-                spectra = DT[subset.upper()]["Spectra"].ds
-                # remove samples where the depth is a duplicate, and sort by depth
-                # to allow depth as an index
-                fltr = pd.Series(spectra.depth).duplicated().values
-                spectra = spectra.sel(sample=~fltr)
-                sortidx = np.argsort(spectra.depth.values)
-                DT[subset.upper()]["Spectra"] = (
-                    spectra.isel(sample=sortidx)
-                    .swap_dims({"sample": "depth"})
-                    .sortby("depth")
-                )
-                DT[subset.upper()]["Products"] = (
-                    DT[subset.upper()]["Products"]
-                    .ds.isel(sample=sortidx)
-                    .swap_dims({"sample": "depth"})
-                    .sortby("depth")
-                )
 
     #################################################################################
     # add the lidar data, sort out indexing
     if tsgdata.lidar is not None:
-        if index_coord != "depth":
-            # TODO: add depth as a secondary coordinate to this
-            profilometer_ds = xarray.DataArray(
-                tsgdata.lidar,
-                coords={"sample": spectra.sample.values},
-            ).to_dataset(name="Lidar")
-            # alternate method for being able to index on depth for spectral without
-            # dropping rows
-            # specarr = specarr.set_xindex('depth')
-        else:
-            profilometer_ds = xarray.DataArray(
-                tsgdata.lidar[~fltr][sortidx],
-                coords={"depth": spectra.depth.values},
-            ).to_dataset(name="Lidar")
-        sample_coords = {  # get the sample coords again
-            k: v
-            for k, v in coords_from_sampleheaders(getattr(tsgdata, subset)).items()
-            if k == "sample" or (isinstance(v, tuple) and v[0] == "sample")
-        }
-        DT["Lidar"] = profilometer_ds.assign_coords(
-            {k: v for k, v in sample_coords.items() if k != "depth"}
+        # the coordinates used here need to be the sample ones
+        prof_da = xarray.DataArray(tsgdata.lidar, dims=("sample",)).assign_coords(
+            {
+                k: v
+                for k, v in coords_from_sampleheaders(getattr(tsgdata, subset)).items()
+                if k == "sample" or (isinstance(v, tuple) and v[0] == "sample")
+            }
         )
+        if index_coord == "depth":
+            prof_da = reindex_depth(prof_da)
+        if chunks:
+            prof_da = prof_da.chunk(
+                chunks
+                if isinstance(chunks, int)
+                else {k: v for k, v in chunks.items() if k in prof_da.dims}
+            )
+        DT["Lidar"] = prof_da.chunk().to_dataset(name="Lidar")
 
     return DT
 
