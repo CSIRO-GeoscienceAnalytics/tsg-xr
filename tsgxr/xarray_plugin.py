@@ -67,27 +67,16 @@ class CRASBackend(xarray.backends.BackendEntrypoint):
                     np.iinfo(np.uint32).max + 1
                 )
 
-            curpos: int = 0
             # reading the file only takes a small amount of the time
             datas = []
             for i in np.arange(self.header.nchunks):
-                img_nbytes = self.offsets[i + 1] - self.offsets[i]
                 file.seek(
                     (self.offsets[i] + 4 * (self.header.nchunks + 1) + 64).astype(int)
                 )
-                datas += [
-                    (curpos, file.read(img_nbytes))
-                ]  # the pos is only needed for later allocation workflows... not if stacking
-                curpos += self.header.chunksize
+                datas.append(file.read(self.offsets[i + 1] - self.offsets[i]))
 
             # not sure if it's faster to alloate the array upfront or just concatenate the arrays
-
-            # def assign_data(pos, data):
-            #     img_data = decode_jpeg(data, colorspace="BGR")[::-1]
-            #     cras[pos : (pos + img_data.shape[0]), :, :] = img_data
-            #     del img_data
-
-            def get_img(pos, data):
+            def get_img(data):
                 return decode_jpeg(data, colorspace="BGR")[::-1]
 
             cras = np.vstack(
@@ -100,21 +89,6 @@ class CRASBackend(xarray.backends.BackendEntrypoint):
                 )
             )
             del datas
-            # cras = np.zeros(
-            #     (self.header.nl, self.header.ns, self.header.nb), dtype=np.uint8
-            # )
-            # for i in np.arange(self.header.nchunks):
-            #     img_nbytes = self.offsets[i + 1] - self.offsets[i]
-            #     file.seek(
-            #         (self.offsets[i] + 4 * (self.header.nchunks + 1) + 64).astype(int)
-            #     )
-            #     img_data = decode_jpeg(file.read(img_nbytes), colorspace="BGR")[::-1]
-            #     # reverse the channels, and flip the image upsidedown, after decoding
-            #     cras[curpos : (curpos + img_data.shape[0]), :, :] = img_data
-            #     curpos += img_data.shape[0]
-            #     del img_data
-            #     if pbar:
-            #         pbar.update(1)
 
             info_table_start = (
                 64
