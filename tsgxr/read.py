@@ -87,104 +87,6 @@ def coords_from_sampleheaders(spectraldata):
     return coords
 
 
-def load_tsg(
-    directory,
-    image=True,
-    index_coord="sample",
-    lazy=False,
-    chunks=None,
-    **kwargs,
-):
-    """
-    Load a TSG dataset.
-
-    Parameters
-    ----------
-    directory : str | pathlib.Path
-        Directory of the TSG datset to load.
-    spectra : str
-        Which spectra to load by default, NIR or TIR.
-    image : bool
-        Whether to load the high-resolution RGB imagery.
-    index_coord : str
-        Index coordinate to use for the dataset.
-        Using "depth" requires some post-processing and dropping duplicates.
-
-    Returns
-    -------
-    xarray.Dataset
-        Dataset containing the spectra and associated data.
-    """
-    directory = Path(directory)
-
-    crasfile = list(directory.glob("*cras.bip*"))
-    if crasfile:
-        crasfile = crasfile[0]
-    tsgdata = pytsg.parse_tsg.read_package(directory, read_cras_file=False, **kwargs)
-    DT: xarray.DataTree = tsg_to_xarray(tsgdata, index_coord=index_coord, chunks=chunks)
-    if image:
-        if not crasfile:
-            raise FileNotFoundError(
-                "CRAS file matching *cras.bip not found in directory."
-            )
-        else:
-            ds = xarray.open_dataset(
-                crasfile, engine="lazycras" if lazy else "cras", chunks=chunks
-            )
-            section_depths = (
-                tsgdata.nir.sampleheaders[["T", "L", "D"]]
-                .apply(pd.to_numeric)
-                .groupby(["T", "L"])
-                .agg(["min", "max"])
-                .values.astype(np.float32)
-            )
-            depths = interpolate_section_depths(
-                section_depths, [t.nlines for t in ds.Image.attrs["section"]]
-            )
-            _dx = dy = np.median(np.diff(depths[:200]))
-            horizontal = np.arange(0, ds.Image.shape[1]) * dy
-            horizontal -= horizontal.mean()
-            ds = ds.assign_coords(depth=("x", depths), width=("y", horizontal))
-
-            if index_coord == "depth":
-                # there are no duplicate depths in the image, so we dont' need to deduplicate this
-                # TODO: assign sample-based coordinates as per depth ranges in the deduplicated sample spectra image
-                DT["Image"] = (
-                    ds.swap_dims({"x": "depth"})
-                    .swap_dims({"y": "width"})
-                    .sortby("depth")
-                    .assign_coords(
-                        {
-                            "section": ("depth", ds.section.values),
-                            "tray": ("depth", ds.tray.values),
-                        }
-                    )
-                )
-
-            else:
-                #  we can assign sample-based coords
-                spectra_key = next(k for k in ["NIR", "MIR", "TIR"] if k in DT)
-                spectra_ds = getattr(DT, spectra_key)  # subset not implemented
-                pixels_per_sample = (
-                    DT["Image"].coords["depth"].size
-                    / spectra_ds[spectra_key].coords["sample"].size
-                )
-                assert np.isclose(
-                    int(pixels_per_sample), pixels_per_sample
-                )  # should be an even number
-                pixels_per_sample = int(pixels_per_sample)
-                # the image will have its own depth but otherwise the sample coords should transfer
-
-                DT["Image"] = ds.assign_coords(
-                    {
-                        k: ("x", np.repeat(v.values, pixels_per_sample))
-                        for k, v in spectra_ds[spectra_key].coords.items()
-                        if (k == "sample" or v.dims[0] == "sample") and k != "depth"
-                    }
-                )
-    return DT
-
-
 def reindex_depth(
     da: xarray.DataArray, template: xarray.Dataset | xarray.DataArray | None = None
 ):
@@ -196,6 +98,110 @@ def reindex_depth(
     template = template.sel(sample=~fltr)
     sortidx = np.argsort(template.depth.values)
     return da.isel(sample=sortidx).swap_dims({"sample": "depth"}).sortby("depth")
+
+
+def reorder_variables(
+    ds,
+    drop=[],  # ["Tray", "Section", "Depth (m)", "SecDist (mm)", "TraySamp", "SecSamp"],
+    patterns=None,
+):
+    """
+    Reorder the variables within an Xarray dataset containing TSG data such that
+    it's more easily visually navigated (note this does not persist upon serialization).
+
+    Parameters
+    ----------
+    ds : xarray.Dataset
+        Dataset to reorder.
+    drop : list
+        Variables to exclude (typically either duplciated in indexes or easily calculated).
+    patterns : list
+        List of regex patterns to match column groups of band headers within TSG files.
+
+    Returns
+    -------
+    ds : xarray.Dataset
+        Reordered dataset.
+    """
+    if patterns is None:
+        patterns = [
+            r"Grp\d*",
+            r"Min\d*",
+            r"Wt\d*",
+            r"Error\d*",
+            "SNR",
+            "NIL_Stat",
+            "Cust",
+            "Bound_Water",
+            "Unbound_Water",
+        ]
+    arrangement = [
+        v
+        for v in [
+            "HoleID",
+            "Date",
+            "Depth (m)",
+            "Tray",
+            "Section",
+            "Centres",
+            "Depths",
+            "Widths",
+        ]
+        if v in ds.data_vars
+    ]
+
+    arrangement += [
+        v
+        for ptn in patterns
+        for v in sorted([v for v in ds.data_vars if re.match(ptn, v)])
+    ]
+
+    others = sorted(
+        set(
+            [v for v in ds.data_vars if (v not in arrangement)]
+            + ["Flags"]
+            + [v for v in ds.data_vars if v.lower() == v]
+        )
+    )
+    ds = ds[
+        [v for v in arrangement + others if (v not in drop) and (v in ds.data_vars)]
+    ]
+    return ds
+
+
+def product_dataset_to_xarray(scalars: pd.DataFrame, classes):
+    scalar_data = scalars.copy()  # pd.DataFrame
+    floatvals = scalar_data.select_dtypes(float).columns
+    scalar_data[floatvals] = np.where(
+        np.isclose(scalar_data.loc[:, floatvals].values, np.finfo("float32").min),
+        np.nan,
+        scalar_data.loc[:, floatvals.values],
+    )
+    # could drop emtpy columns but is unlikely to be many
+    products = scalar_data.set_index(
+        pd.Series(scalar_data.index.values, name="sample")
+    ).to_xarray()
+    products.attrs.update(
+        {ch.name: [(i, v) for i, v in ch.classes.items()] for id, ch in classes.items()}
+    )
+    for grp in ["Centre", "Depth", "Width"]:
+        arr = (
+            products[[v for v in products.data_vars if re.match(grp + r"\d+", v)]]
+            .to_array()
+            .rename({"variable": "feature"})
+        )
+        products = products[
+            [v for v in products.data_vars if v not in arr.coords["feature"]]
+        ]
+        arr["feature"] = [f.replace(grp, "") for f in arr["feature"].values]
+        arr = xarray.where(arr == 0, np.nan, arr)
+        arr.attrs = {}
+
+        products[grp + "s"] = arr
+    # convert traynames, otherwise occasionally converted to integers
+    products["Tray"] = products["Tray"].astype("<U16")
+    products = reorder_variables(products)
+    return products
 
 
 def spectral_dataset_to_xarray(
@@ -226,44 +232,9 @@ def spectral_dataset_to_xarray(
         for k, v in _coords.items()
         if k == "sample" or (isinstance(v, tuple) and v[0] == "sample")
     }
-    scalar_data = spectra.scalars.copy()
-    floatvals = scalar_data.select_dtypes(float).columns
-    scalar_data[floatvals] = np.where(
-        np.isclose(scalar_data.loc[:, floatvals].values, np.finfo("float32").min),
-        np.nan,
-        scalar_data.loc[:, floatvals.values],
-    )
-    # TODO: should spectra, products, Lidar be integrated into the same dataset?
-    # could drop emtpy columns but is unlikely to be many
-    products = scalar_data.set_index(
-        pd.Series(scalar_data.index.values, name="sample")
-    ).to_xarray()
-    # TODO: some of these attributes could be propagated to other parts of the dataset
-
-    products.attrs.update(
-        {
-            ch.name: [(i, v) for i, v in ch.classes.items()]
-            for id, ch in spectra.classes.items()
-        }
-    )
-    for grp in ["Centre", "Depth", "Width"]:
-        arr = (
-            products[[v for v in products.data_vars if re.match(grp + r"\d+", v)]]
-            .to_array()
-            .rename({"variable": "feature"})
-        )
-        products = products[
-            [v for v in products.data_vars if v not in arr.coords["feature"]]
-        ]
-        arr["feature"] = [f.replace(grp, "") for f in arr["feature"].values]
-        arr = xarray.where(arr == 0, np.nan, arr)
-        arr.attrs = {}
-
-        products[grp + "s"] = arr
-    # convert traynames, otherwise occasionally converted to integers
-    products["Tray"] = products["Tray"].astype("<U16")
-    products = reorder_variables(products)
-    #################################################################################
+    # handle products
+    products = product_dataset_to_xarray(spectra.scalars, spectra.classes)
+    ###############################################################################s##
     # add the spectra, and move it to the top of the variable list
     spectra_da = xarray.DataArray(
         spectra.spectra,
@@ -356,70 +327,100 @@ def tsg_to_xarray(
     return DT
 
 
-def reorder_variables(
-    ds,
-    drop=[],  # ["Tray", "Section", "Depth (m)", "SecDist (mm)", "TraySamp", "SecSamp"],
-    patterns=None,
+def load_tsg(
+    directory,
+    image=True,
+    index_coord="sample",
+    lazy=False,
+    chunks=None,
+    **kwargs,
 ):
     """
-    Reorder the variables within an Xarray dataset containing TSG data such that
-    it's more easily visually navigated (note this does not persist upon serialization).
+    Load a TSG dataset.
 
     Parameters
     ----------
-    ds : xarray.Dataset
-        Dataset to reorder.
-    drop : list
-        Variables to exclude (typically either duplciated in indexes or easily calculated).
-    patterns : list
-        List of regex patterns to match column groups of band headers within TSG files.
+    directory : str | pathlib.Path
+        Directory of the TSG datset to load.
+    spectra : str
+        Which spectra to load by default, NIR or TIR.
+    image : bool
+        Whether to load the high-resolution RGB imagery.
+    index_coord : str
+        Index coordinate to use for the dataset.
+        Using "depth" requires some post-processing and dropping duplicates.
 
     Returns
     -------
-    ds : xarray.Dataset
-        Reordered dataset.
+    xarray.Dataset
+        Dataset containing the spectra and associated data.
     """
-    if patterns is None:
-        patterns = [
-            r"Grp\d*",
-            r"Min\d*",
-            r"Wt\d*",
-            r"Error\d*",
-            "SNR",
-            "NIL_Stat",
-            "Cust",
-            "Bound_Water",
-            "Unbound_Water",
-        ]
-    arrangement = [
-        v
-        for v in [
-            "HoleID",
-            "Date",
-            "Depth (m)",
-            "Tray",
-            "Section",
-            "Centres",
-            "Depths",
-            "Widths",
-        ]
-        if v in ds.data_vars
-    ]
+    directory = Path(directory)
 
-    arrangement += [
-        v
-        for ptn in patterns
-        for v in sorted([v for v in ds.data_vars if re.match(ptn, v)])
-    ]
+    crasfile = list(directory.glob("*cras.bip*"))
+    if crasfile:
+        crasfile = crasfile[0]
+    # TODO: read each of the file pairs using the xarray backend
+    tsgdata = pytsg.parse_tsg.read_package(directory, read_cras_file=False, **kwargs)
+    DT: xarray.DataTree = tsg_to_xarray(tsgdata, index_coord=index_coord, chunks=chunks)
+    if image:
+        if not crasfile:
+            raise FileNotFoundError(
+                "CRAS file matching *cras.bip not found in directory."
+            )
+        else:
+            ds = xarray.open_dataset(
+                crasfile, engine="lazycras" if lazy else "cras", chunks=chunks
+            )
+            section_depths = (
+                tsgdata.nir.sampleheaders[["T", "L", "D"]]
+                .apply(pd.to_numeric)
+                .groupby(["T", "L"])
+                .agg(["min", "max"])
+                .values.astype(np.float32)
+            )
+            depths = interpolate_section_depths(
+                section_depths, [t.nlines for t in ds.Image.attrs["section"]]
+            )
+            _dx = dy = np.median(np.diff(depths[:200]))
+            horizontal = np.arange(0, ds.Image.shape[1]) * dy
+            horizontal -= horizontal.mean()
+            ds = ds.assign_coords(depth=("x", depths), width=("y", horizontal))
 
-    others = sorted(
-        set(
-            [v for v in ds.data_vars if (v not in arrangement)]
-            + ["Flags"]
-            + [v for v in ds.data_vars if v.lower() == v]
-        )
-    )
-    ds = ds[
-        [v for v in arrangement + others if (v not in drop) and (v in ds.data_vars)]
-    ]
-    return ds
+            if index_coord == "depth":
+                # there are no duplicate depths in the image, so we dont' need to deduplicate this
+                # TODO: assign sample-based coordinates as per depth ranges in the deduplicated sample spectra image
+                DT["Image"] = (
+                    ds.swap_dims({"x": "depth"})
+                    .swap_dims({"y": "width"})
+                    .sortby("depth")
+                    .assign_coords(
+                        {
+                            "section": ("depth", ds.section.values),
+                            "tray": ("depth", ds.tray.values),
+                        }
+                    )
+                )
+
+            else:
+                #  we can assign sample-based coords
+                spectra_key = next(k for k in ["NIR", "MIR", "TIR"] if k in DT)
+                spectra_ds = getattr(DT, spectra_key)  # subset not implemented
+                pixels_per_sample = (
+                    DT["Image"].coords["depth"].size
+                    / spectra_ds[spectra_key].coords["sample"].size
+                )
+                assert np.isclose(
+                    int(pixels_per_sample), pixels_per_sample
+                )  # should be an even number
+                pixels_per_sample = int(pixels_per_sample)
+                # the image will have its own depth but otherwise the sample coords should transfer
+
+                DT["Image"] = ds.assign_coords(
+                    {
+                        k: ("x", np.repeat(v.values, pixels_per_sample))
+                        for k, v in spectra_ds[spectra_key].coords.items()
+                        if (k == "sample" or v.dims[0] == "sample") and k != "depth"
+                    }
+                )
+    return DT

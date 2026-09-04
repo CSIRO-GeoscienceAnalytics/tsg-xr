@@ -37,7 +37,8 @@ tsgxr = "tsgxr.cli:app"
 [project.entry-points."xarray.backends"]
 lazycras = "tsgxr.xarray_plugin:LazyCRASBackend"
 cras = "tsgxr.xarray_plugin:CRASBackend"
-
+tsg = "tsgxr.xarray_plugin:TSGBIPBackend"
+lazytsg = "tsgxr.xarray_plugin:LazyTSGBIPBackend"
 
 [project.optional-dependencies]
 dask = ["dask"]

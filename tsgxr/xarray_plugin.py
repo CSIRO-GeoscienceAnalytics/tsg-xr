@@ -4,10 +4,20 @@ from pathlib import Path
 import joblib
 import numpy as np
 import xarray
-from pytsg.parse_tsg import CrasHeader, SectionInfo, TrayInfo, read_tsg_bip_pair
+from pytsg.parse_tsg import (
+    CrasHeader,
+    SectionInfo,
+    TrayInfo,
+    _calculate_wavelengths,
+    _find_header_sections,
+    _parse_scalars,
+    _parse_tsg,
+    _read_tsg_file,
+    read_tsg_bip_pair,
+)
 from simplejpeg import decode_jpeg
 
-from .read import spectral_dataset_to_xarray
+from .read import product_dataset_to_xarray, spectral_dataset_to_xarray
 
 try:
     import dask
@@ -62,6 +72,144 @@ class TSGBIPBackend(xarray.backends.BackendEntrypoint):
 
     def guess_can_open(self, filename_or_obj: str | Path) -> bool:
 
+        fpath = Path(filename_or_obj)
+        return ((fpath.suffix == ".bip") and ("tsg" in fpath.stem)) or (
+            (fpath.suffix == ".tsg") and ("tsg" in fpath.stem)
+        )
+
+
+class BIPBackendArray(xarray.backends.BackendArray):
+    def __init__(
+        self,
+        filename_or_obj,
+        shape=None,
+        dtype=None,
+        lock=None,
+        chunks=None,
+        n_bands: int = 512,
+        n_samples: int | None = None,
+    ):
+
+        self.lock = lock
+        if chunks is None:
+            chunks = {}
+
+        fpath = Path(filename_or_obj)
+        self.tsg, self.bip, self.hdr = None, None, None
+        self.bip = fpath if fpath.suffix == ".bip" else fpath.with_suffix(".bip")
+        self.tsg = fpath if fpath.suffix == ".tsg" else fpath.with_suffix(".tsg")
+        self.hdr = next(fpath.parent.glob("*tsg.hdr"))
+        if not self.bip.exists() and self.tsg.exists() and self.hdr.exists():
+            raise FileNotFoundError(
+                f"Missing file: {','.join(([self.bip.name] if not self.bip.exists() else []) + ([self.tsg.name] if not self.tsg.exists() else []) + ([self.hdr.name] if not self.hdr.exists() else []))}"
+            )
+        self.fstr = _read_tsg_file(self.tsg)
+        self.headers = _find_header_sections(self.fstr)
+        self.info = _parse_tsg(self.fstr, self.headers)
+        self.wavelength = _calculate_wavelengths(
+            self.info["wavelength specs"], self.info["coordinates"]
+        )
+        self.info["coordinates"] = {
+            k: int(v) for k, v in self.info["coordinates"].items()
+        }
+        self.shape = (
+            2,
+            self.info["coordinates"]["lastsample"],
+            self.info["coordinates"]["lastband"],
+        )
+        self.dtype = np.dtype(np.float32)
+
+    def __getitem__(self, key: tuple):
+        return xarray.core.indexing.explicit_indexing_adapter(
+            key,
+            self.shape,
+            xarray.core.indexing.IndexingSupport.BASIC,
+            self._raw_indexing_method,
+        )
+
+    def _raw_indexing_method(self, key: tuple):
+        key1 = key[1]
+        if isinstance(key1, slice):
+            start = key1.start or 0
+            stop = key1.stop or self.shape[1]  # final pixel
+        else:
+            start = key1
+            stop = key1
+
+        nsamples = stop - start
+
+        with self.lock, open(self.bip, "rb") as f:
+            arr = np.fromfile(
+                f,
+                offset=start
+                * self.info["coordinates"]["lastband"]
+                * 2
+                * np.dtype(self.dtype).itemsize,
+                count=nsamples * self.info["coordinates"]["lastband"] * 2,
+                dtype=self.dtype,
+            ).reshape(2, nsamples, self.info["coordinates"]["lastband"])
+
+        arr = xarray.DataArray(
+            arr,
+            dims=("band", "sample", "wavelength"),
+            coords={
+                "band": np.arange(2),
+                "sample": np.arange(start, stop),
+                "wavelength": self.wavelength,
+            },
+        )
+        if isinstance(key, int):
+            arr = arr.squeeze()
+        return arr.loc[*key].values
+
+
+class LazyTSGBIPBackend(xarray.backends.BackendEntrypoint):
+    """
+    A lazy-loading xarray backend to open a single TSG spectral dataset.
+    """
+
+    description = "Lazy-load TSG spectral datasets using xarray"
+
+    def open_dataset(
+        self,
+        filename_or_obj,
+        header_format="20s2I8h4I2h",
+        tray_info_format: str = "3f2i",
+        section_info_format: str = "4f3i",
+        drop_variables=None,
+        lock=None,
+        chunks=None,
+    ) -> xarray.Dataset:
+        if chunks is None:
+            chunks = {}
+        backend_array = BIPBackendArray(
+            filename_or_obj=filename_or_obj, lock=get_lock()
+        )
+        self.lock = lock or get_lock()
+
+        # lazy data array representing the spectral array
+        da = xarray.DataArray(
+            data=xarray.core.indexing.LazilyIndexedArray(backend_array),
+            dims=("band", "sample", "wavelength"),
+            coords={
+                "band": np.arange(2),
+                "sample": np.arange(
+                    0, backend_array.info["coordinates"]["lastsample"], dtype=np.int32
+                ),
+                "wavelength": backend_array.wavelength,
+            },
+        )
+        product_data = product_dataset_to_xarray(  # products always loads
+            _parse_scalars(
+                da[1].values,
+                backend_array.info["class"],
+                backend_array.info["band headers"],
+            ),
+            backend_array.info["class"],
+        )
+        return product_data.assign(Spectra=da[0])
+
+    def guess_can_open(self, filename_or_obj: str | Path) -> bool:
         fpath = Path(filename_or_obj)
         return ((fpath.suffix == ".bip") and ("tsg" in fpath.stem)) or (
             (fpath.suffix == ".tsg") and ("tsg" in fpath.stem)
