@@ -107,6 +107,12 @@ def load_tsg(
                     .swap_dims({"x": "depth"})
                     .swap_dims({"y": "width"})
                     .sortby("depth")
+                    .assign_coords(
+                        {
+                            "section": ("depth", DT["Image"]["Image"].section),
+                            "tray": ("depth", DT["Image"]["Image"].tray),
+                        }
+                    )
                 )
 
             else:
