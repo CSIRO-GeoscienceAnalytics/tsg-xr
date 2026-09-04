@@ -30,10 +30,10 @@ DT : xarray.DataTree = load_tsg("./Hylogger_Hole_42")
 Key array-based data can be accessed directly from this `xarray.Datatree` object:
 
 ```python
-DT['NIR']['Spectra']: xarray.Dataset
-DT['NIR']['Products']: xarray.Dataset
-DT['TIR']['Spectra']: xarray.Dataset
-DT['TIR']['Products']: xarray.Dataset
+DT['NIR/Spectra']: xarray.Dataset
+DT['NIR/Products']: xarray.Dataset
+DT['TIR/Spectra']: xarray.Dataset
+DT['TIR/Products']: xarray.Dataset
 DT['Image']: xarray.Dataset
 DT['Lidar']: xarray.Dataset
 ```
@@ -51,7 +51,7 @@ plt.gca().set(aspect="equal"); # fix the aspect ratio
 Similarly, to plot the spectra from a specific interval (e.g. 9.2 to 9.3m here) against wavelength, you can provide a slice to the `xarray.DataArray.sel` method:
 
 ```python
-spectra : xarray.DataArray = DT["NIR"]["Spectra"].ds["Spectra"]
+spectra : xarray.DataArray = DT["NIR/Spectra"].ds["Spectra"]
 
 spectra.sel(depth=slice(9.2, 9.3)).plot.line(
     x="wavelength", add_legend=False, color="k", alpha=0.5
