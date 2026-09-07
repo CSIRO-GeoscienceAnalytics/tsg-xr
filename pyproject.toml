@@ -1,0 +1,79 @@
+[build-system]
+requires = ["setuptools>=80", "setuptools-scm>=10.2.1"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "tsg-xr"
+authors = [
+  { name = "Morgan Williams", email = "morgan.williams@csiro.au" },
+  { name = "Alex Hunt", email = "Alex.Hunt@csiro.au" },
+]
+description = "A tool for reading TSG spectra data into Xarray."
+requires-python = ">=3.11"
+classifiers = [
+  "Programming Language :: Python :: 3",
+  "Operating System :: OS Independent",
+]
+dependencies = [
+  "numpy",
+  "xarray>=2025",
+  "zarr",
+  "pandas",
+  "pytsg>=0.2.8",
+  "typer",
+  "joblib",
+  "dask"
+
+]
+keywords = ["TSG", "spectra"]
+dynamic = ["version", "readme"]
+
+[tool.setuptools]
+packages = ['tsgxr']
+
+[project.urls]
+repository = "https://github.com/CSIRO-GeoscienceAnalytics/tsg-xr"
+issues = "https://github.com/CSIRO-GeoscienceAnalytics/tsg-xr/issues"
+
+[project.scripts]
+tsgxr = "tsgxr.cli:app"
+
+[project.entry-points."xarray.backends"]
+lazycras = "tsgxr.xarray_plugin:LazyCRASBackend"
+cras = "tsgxr.xarray_plugin:CRASBackend"
+tsg = "tsgxr.xarray_plugin:TSGBIPBackend"
+lazytsg = "tsgxr.xarray_plugin:LazyTSGBIPBackend"
+
+[project.optional-dependencies]
+plot = ["matplotlib"]
+notebook = ["matplotlib", 'ipykernel']
+docs = [
+  "sphinx_rtd_theme",
+  "docutils",
+  "sphinx>=4",
+  "sphinx-autodoc-annotation",
+  "sphinx_gallery",
+  "myst-parser",
+  "nbsphinx",
+  "ipykernel",                 # for nbsphinx to find a kernel
+]
+test = ["pytest", "pytest-cov", "coverage"]
+dev = ["build", "ruff", "tsg-xr[notebook,test,docs]"]
+
+[tool.setuptools.dynamic]
+readme = { file = "README.md", content-type = "text/markdown" }
+
+[tool.pytest.ini_options]
+python_files = "*.py"
+addopts = "--cov=tsg-xr --cov-report html --cov-report xml --cov-report term-missing"
+testpaths = ["test"]
+pythonpath = ["."]
+
+[tool.coverage.run]
+# Ignore _version.py
+omit = ["test/*", "docs/*", "*/_version.py"]
+relative_files = true
+source = ["tsg-xr"]
+
+[tool.setuptools_scm]
+fallback_version = "0.0.0"
