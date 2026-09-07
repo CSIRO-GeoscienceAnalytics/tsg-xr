@@ -259,7 +259,10 @@ def spectral_dataset_to_xarray(
         dims=("sample", "wavelength"),
     )
     if index_coord == "depth":
+        # have to do products first, otherwise spectra_da is changed
+        products = _reindex_depth(products, template=spectra_da)
         spectra_da = _reindex_depth(spectra_da)
+
     if chunks:
         spectra_da = spectra_da.chunk(
             chunks
