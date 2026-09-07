@@ -7,6 +7,10 @@ import pandas as pd
 import pytsg.parse_tsg
 import xarray
 
+from .util import Handle
+
+logger = Handle(__name__)
+
 
 def interpolate_section_depths(
     section_depths: np.ndarray, ninterp: int | np.ndarray

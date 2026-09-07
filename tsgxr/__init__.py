@@ -2,6 +2,10 @@ from pathlib import Path
 
 from ._version import __version__
 from .read import load_tsg
+from .util import Handle
+
+logger = Handle(__name__)
+
 
 __all__ = ["__version__", "find_TSG_datasets", "load_tsg"]
 

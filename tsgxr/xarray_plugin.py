@@ -18,6 +18,10 @@ from pytsg.parse_tsg import (
 from simplejpeg import decode_jpeg
 
 from .read import product_dataset_to_xarray, spectral_dataset_to_xarray
+from .util import Handle
+
+logger = Handle(__name__)
+
 
 try:
     import dask
