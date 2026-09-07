@@ -272,7 +272,7 @@ class CRASBackend(xarray.backends.BackendEntrypoint):
                     joblib.Parallel(
                         n_jobs=-1, backend="threading", return_as="generator"
                     )(
-                        (joblib.delayed(get_img)(*d) for d in datas),
+                        (joblib.delayed(get_img)(d) for d in datas),
                     )
                 )
             )

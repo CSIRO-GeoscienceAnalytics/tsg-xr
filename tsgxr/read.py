@@ -407,8 +407,8 @@ def load_tsg(
                 spectra_key = next(k for k in ["NIR", "MIR", "TIR"] if k in DT)
                 spectra_ds = getattr(DT, spectra_key)  # subset not implemented
                 pixels_per_sample = (
-                    DT["Image"].coords["depth"].size
-                    / spectra_ds[spectra_key].coords["sample"].size
+                    ds.coords["depth"].size
+                    / spectra_ds["Spectra"].coords["sample"].size
                 )
                 assert np.isclose(
                     int(pixels_per_sample), pixels_per_sample
@@ -419,7 +419,7 @@ def load_tsg(
                 DT["Image"] = ds.assign_coords(
                     {
                         k: ("x", np.repeat(v.values, pixels_per_sample))
-                        for k, v in spectra_ds[spectra_key].coords.items()
+                        for k, v in spectra_ds["Spectra"].coords.items()
                         if (k == "sample" or v.dims[0] == "sample") and k != "depth"
                     }
                 )
