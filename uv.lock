@@ -2861,7 +2861,7 @@ wheels = [
 ]
 
 [[package]]
-name = "tsg-xr"
+name = "tsgxr"
 source = { editable = "." }
 dependencies = [
     { name = "dask" },
@@ -2941,7 +2941,7 @@ requires-dist = [
     { name = "sphinx-autodoc-annotation", marker = "extra == 'docs'" },
     { name = "sphinx-gallery", marker = "extra == 'docs'" },
     { name = "sphinx-rtd-theme", marker = "extra == 'docs'" },
-    { name = "tsg-xr", extras = ["docs", "notebook", "test"], marker = "extra == 'dev'" },
+    { name = "tsgxr", extras = ["docs", "notebook", "test"], marker = "extra == 'dev'" },
     { name = "typer" },
     { name = "xarray", specifier = ">=2025" },
     { name = "zarr" },
