@@ -90,6 +90,12 @@ The `tsg-xr` pacakge can be installed standalone into your local environment usi
 
 **Option 1: Standalone Installation**
 
+
+The package is can be installed from PyPI using `pip` with:
+```bash
+pip install tsgxr
+```
+
 The package is also directly installable from GitHub using `pip` with:
 ```bash
 pip install git+https://github.com/CSIRO-GeoscienceAnalytics/tsg-xr
@@ -190,7 +196,7 @@ Group: /
 
 Some rough performance numbers are given below, comparing `tsg-xr` and `pytsg` for the `STAVELY_17` hylogger dataset
 (`07e4dcac-5216-44a6-9a6b-0c4c1f7ce7d` in NVCL shown above, CRAS is 296MB and it has NIR and TIR spectral data 
-totalling 155MB); these were performed on Windows using an i7-13850HX (2.10 GHz) reading from a Gen4 NVME.
+totalling 155MB); these were performed with Python 3.13 on Windows using an i7-13850HX (2.10 GHz) reading from a Gen4 NVME.
 
 Note that `tsg-xr` *is not necessarilly faster* in loading data (it uses `pytsg` for some of the basic loading steps and data classes), 
 but it provides a more formatted/annotated data structure, translation of coordinates, and nodata values.
