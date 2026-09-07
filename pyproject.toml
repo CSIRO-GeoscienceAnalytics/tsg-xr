@@ -4,7 +4,10 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "tsg-xr"
-authors = [{ name = "Morgan Williams", email = "morgan.williams@csiro.au" }]
+authors = [
+  { name = "Morgan Williams", email = "morgan.williams@csiro.au" },
+  { name = "Alex Hunt", email = "Alex.Hunt@csiro.au" },
+]
 description = "A tool for reading TSG spectra data into Xarray."
 requires-python = ">=3.11"
 classifiers = [
@@ -13,13 +16,14 @@ classifiers = [
 ]
 dependencies = [
   "numpy",
-  "xarray>=2024.10",
+  "xarray>=2025",
   "zarr",
   "pandas",
   "pytsg>=0.2.8",
   "typer",
-  "joblib"
-  
+  "joblib",
+  "dask"
+
 ]
 keywords = ["TSG", "spectra"]
 dynamic = ["version", "readme"]
@@ -41,7 +45,6 @@ tsg = "tsgxr.xarray_plugin:TSGBIPBackend"
 lazytsg = "tsgxr.xarray_plugin:LazyTSGBIPBackend"
 
 [project.optional-dependencies]
-dask = ["dask"]
 plot = ["matplotlib"]
 notebook = ["matplotlib", 'ipykernel']
 docs = [
@@ -55,7 +58,7 @@ docs = [
   "ipykernel",                 # for nbsphinx to find a kernel
 ]
 test = ["pytest", "pytest-cov", "coverage"]
-dev = ["build", "ruff", "twine", "tsg-xr[notebook,dask,test,docs]"]
+dev = ["build", "ruff", "tsg-xr[notebook,test,docs]"]
 
 [tool.setuptools.dynamic]
 readme = { file = "README.md", content-type = "text/markdown" }

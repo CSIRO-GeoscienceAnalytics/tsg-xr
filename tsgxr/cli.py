@@ -1,4 +1,8 @@
+import os
 from pathlib import Path
+
+os.environ["TYPER_USE_RICH"] = os.environ.get("TYPER_USE_RICH", "False")
+
 
 import typer
 
