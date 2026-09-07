@@ -186,6 +186,56 @@ Group: /
             Image    (depth, width, channel) uint8 8GB dask.array<chunksize=(511, 512, 3), meta=np.ndarray>
 ```
 
+## Performance Overview
+
+Some rough performance numbers are given below, comparing `tsg-xr` and `pytsg` for the `STAVELY_17` hylogger dataset
+(`07e4dcac-5216-44a6-9a6b-0c4c1f7ce7d` in NVCL shown above, CRAS is 296MB and it has NIR and TIR spectral data 
+totalling 155MB); these were performed on Windows using an i7-13850HX (2.10 GHz) reading from a Gen4 NVME.
+
+Note that `tsg-xr` *is not necessarilly faster* in loading data (it uses `pytsg` for some of the basic loading steps and data classes), 
+but it provides a more formatted/annotated data structure, translation of coordinates, and nodata values.
+Further, the main benefits of lazy loading are for true color imagery, and principally for memory usage where you're not 
+planning to load the whole dataset (at least at once), including where the imagery is of greater size than availabile RAM. 
+
+
+Loading the whole dataset *without an image*:
+```python
+> %timeit load_tsg(hyloggerdir, image=False, lazy=False) # tsg-xr
+3.04 s ± 158 ms per loop (mean ± std. dev. of 7 runs, 1 loop each)
+
+> %timeit load_tsg(hyloggerdir, image=False, lazy=True) # lazy tsg-xr
+2.65 s ± 144 ms per loop (mean ± std. dev. of 7 runs, 1 loop each)
+
+> %timeit read_package(hyloggerdir, read_cras_file=False) # pytsg
+429 ms ± 36.9 ms per loop (mean ± std. dev. of 7 runs, 1 loop each)
+```
+
+Loading the dataset *with an image*:
+
+```python
+%timeit load_tsg(hyloggerdir, image=True) # tsg-xr
+7.06 s ± 955 ms per loop (mean ± std. dev. of 7 runs, 1 loop each)
+
+%timeit load_tsg(hyloggerdir, image=True, lazy=True) # lazy tsg-xr
+2.98 s ± 372 ms per loop (mean ± std. dev. of 7 runs, 1 loop each)
+
+%timeit read_package(hyloggerdir, read_cras_file=True) # pytsg
+19.5 s ± 9.41 s per loop (mean ± std. dev. of 7 runs, 1 loop each)
+```
+
+Reading a TSG spectral dataset:
+
+```python
+> %timeit xarray.open_dataset(tsgfile, engine="tsg") # tsg-xr
+1 s ± 23.1 ms per loop (mean ± std. dev. of 7 runs, 1 loop each)
+
+> %timeit  xarray.open_dataset(tsgfile, engine="lazytsg") # lazy tsg-xr
+303 ms ± 7.91 ms per loop (mean ± std. dev. of 7 runs, 1 loop each)
+
+> %timeit pytsg.parse_tsg.read_tsg_bip_pair(tsgfile, bipfile, "NIR",) # pytsg
+192 ms ± 6.42 ms per loop (mean ± std. dev. of 7 runs, 1 loop each)
+```
+
 ## Command Line Interface
 
 ### Converting TSG files to Zarr
