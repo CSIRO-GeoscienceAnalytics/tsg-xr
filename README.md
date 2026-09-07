@@ -8,11 +8,11 @@ have been processed with the software) consists of an ensemble of files:
 * Low resolution core imagery exports (hole overview, per-tray imagery; as JPEG images with associated markup)
 
 `tsg-xr` heavily leverages the filereader of [`pytsg`](https://https://github.com/Geological-Survey-of-Western-Australia/pytsg) to 
-provide access to these data, and presents data in an [Xarray](xarray.pydata.org) format to condense the 
+provide access to these data, and presents data in an [Xarray](https://xarray.pydata.org) format to condense the 
 otherwise complex arrangement. Here `pytsg` provides an efficient interface to the 
 binary components of the TSG file format, and `tsg-xr` is largely just arranging this into a condensed 
 data structure which allows easier subseqent use (and serialization to indexable formats, e.g. 
-[Zarr](https://zarr.readthedocs.io)).
+[Zarr](https://zarr.dev/)).
 
 ## Usage
 
