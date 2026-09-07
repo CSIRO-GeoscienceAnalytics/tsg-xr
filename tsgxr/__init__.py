@@ -6,7 +6,7 @@ from .read import load_tsg
 __all__ = ["__version__", "find_TSG_datasets", "load_tsg"]
 
 
-def find_TSG_datasets(parent_directory):
+def find_TSG_datasets(parent_directory: Path | str) -> dict:
     """
     Check a directory for subdirectories containing Hylogger TSG datasets.
 

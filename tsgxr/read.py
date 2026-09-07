@@ -7,11 +7,10 @@ import pandas as pd
 import pytsg.parse_tsg
 import xarray
 
-# change a default setting for pytsg
-# pytsg.parse_tsg.read_hires_dat = partial(pytsg.parse_tsg.read_hires_dat,  per_spectra=False)
 
-
-def interpolate_section_depths(section_depths, ninterp):
+def interpolate_section_depths(
+    section_depths: np.ndarray, ninterp: int | np.ndarray
+) -> np.ndarray:
     """
     Interpolate section depths based on a number of interpolated samples.
 
@@ -39,7 +38,7 @@ def interpolate_section_depths(section_depths, ninterp):
     )
 
 
-def coords_from_sampleheaders(spectraldata):
+def coords_from_sampleheaders(spectraldata: pytsg.parse_tsg.Spectra) -> dict:
     """
     Turn the sample headers of a TSG spectral subset into coordinates.
 
@@ -87,9 +86,10 @@ def coords_from_sampleheaders(spectraldata):
     return coords
 
 
-def reindex_depth(
+def _reindex_depth(
     da: xarray.DataArray, template: xarray.Dataset | xarray.DataArray | None = None
-):
+) -> xarray.DataArray:
+
     # remove samples where the depth is a duplicate, and sort by depth
     # to allow depth as an index
     if template is None:
@@ -101,10 +101,11 @@ def reindex_depth(
 
 
 def reorder_variables(
-    ds,
-    drop=[],  # ["Tray", "Section", "Depth (m)", "SecDist (mm)", "TraySamp", "SecSamp"],
-    patterns=None,
-):
+    ds: xarray.Dataset,
+    drop: list
+    | None = None,  # ["Tray", "Section", "Depth (m)", "SecDist (mm)", "TraySamp", "SecSamp"],
+    patterns: list | None = None,
+) -> xarray.Dataset:
     """
     Reorder the variables within an Xarray dataset containing TSG data such that
     it's more easily visually navigated (note this does not persist upon serialization).
@@ -123,6 +124,8 @@ def reorder_variables(
     ds : xarray.Dataset
         Reordered dataset.
     """
+    if drop is None:
+        drop = []
     if patterns is None:
         patterns = [
             r"Grp\d*",
@@ -169,7 +172,21 @@ def reorder_variables(
     return ds
 
 
-def product_dataset_to_xarray(scalars: pd.DataFrame, classes):
+def product_dataset_to_xarray(scalars: pd.DataFrame, classes: dict) -> xarray.Dataset:
+    """
+    Transform a set of spectral products/scalars into xarray.align
+
+    Parameters
+    ----------
+    scalars  : pandas.DataFrame
+        Dataframe of loaded by pytsg.
+    classes : dict
+        Mapping of classes, to be added as attributes.
+
+    Returns
+    -------
+    xarray.Dataset
+    """
     scalar_data = scalars.copy()  # pd.DataFrame
     floatvals = scalar_data.select_dtypes(float).columns
     scalar_data[floatvals] = np.where(
@@ -182,7 +199,7 @@ def product_dataset_to_xarray(scalars: pd.DataFrame, classes):
         pd.Series(scalar_data.index.values, name="sample")
     ).to_xarray()
     products.attrs.update(
-        {ch.name: [(i, v) for i, v in ch.classes.items()] for id, ch in classes.items()}
+        {ch.name: [(i, v) for i, v in ch.classes.items()] for ID, ch in classes.items()}
     )
     for grp in ["Centre", "Depth", "Width"]:
         arr = (
@@ -242,7 +259,7 @@ def spectral_dataset_to_xarray(
         dims=("sample", "wavelength"),
     )
     if index_coord == "depth":
-        spectra_da = reindex_depth(spectra_da)
+        spectra_da = _reindex_depth(spectra_da)
     if chunks:
         spectra_da = spectra_da.chunk(
             chunks
@@ -315,7 +332,7 @@ def tsg_to_xarray(
             }
         )
         if index_coord == "depth":
-            prof_da = reindex_depth(prof_da)
+            prof_da = _reindex_depth(prof_da)
         if chunks:
             prof_da = prof_da.chunk(
                 chunks
