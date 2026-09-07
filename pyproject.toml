@@ -3,7 +3,7 @@ requires = ["setuptools>=80", "setuptools-scm>=10.2.1"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "tsg-xr"
+name = "tsgxr"
 authors = [
   { name = "Morgan Williams", email = "morgan.williams@csiro.au" },
   { name = "Alex Hunt", email = "Alex.Hunt@csiro.au" },
@@ -58,14 +58,14 @@ docs = [
   "ipykernel",                 # for nbsphinx to find a kernel
 ]
 test = ["pytest", "pytest-cov", "coverage"]
-dev = ["build", "ruff", "tsg-xr[notebook,test,docs]"]
+dev = ["build", "ruff", "tsgxr[notebook,test,docs]"]
 
 [tool.setuptools.dynamic]
 readme = { file = "README.md", content-type = "text/markdown" }
 
 [tool.pytest.ini_options]
 python_files = "*.py"
-addopts = "--cov=tsg-xr --cov-report html --cov-report xml --cov-report term-missing"
+addopts = "--cov=tsgxr --cov-report html --cov-report xml --cov-report term-missing"
 testpaths = ["test"]
 pythonpath = ["."]
 
@@ -73,7 +73,7 @@ pythonpath = ["."]
 # Ignore _version.py
 omit = ["test/*", "docs/*", "*/_version.py"]
 relative_files = true
-source = ["tsg-xr"]
+source = ["tsgxr"]
 
 [tool.setuptools_scm]
 fallback_version = "0.0.0"
