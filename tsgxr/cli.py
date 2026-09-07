@@ -87,7 +87,6 @@ def callback(
     """
     tsg-xr: A CLI tool for loading and transforming TSG files.
     """
-    pass
 
 
 if __name__ == "__main__":
