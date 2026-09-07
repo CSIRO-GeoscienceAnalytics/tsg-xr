@@ -1,3 +1,4 @@
+import pandas as pd
 import xarray
 
 from .util import Handle
@@ -5,7 +6,27 @@ from .util import Handle
 logger = Handle(__name__)
 
 
-def _product_summary_table(ds, which, level="Grp"):
+def _product_summary_table(
+    ds: xarray.Dataset, which: str, level: str = "Grp"
+) -> pd.DataFrame:
+    """
+    Summarize a TSG scalar/product table, aggregating the long-form
+    used in TSG to a full table.
+
+    Parameters
+    ----------
+    ds : xarray.Dataset
+        Product dataset, as loaded in tsg-xr.
+    which : str
+        Which subset to look at (e.g. S or V for NIR, T for TIR).
+    level : str
+        Whether to summarize at 'Grp' or 'Min' level.
+
+    Returns
+    -------
+    pandas.DataFrame
+        Dataframe with minerals or groups as columns.
+    """
     grps = {
         ix + 1: v
         for ix, v in enumerate(
@@ -16,26 +37,59 @@ def _product_summary_table(ds, which, level="Grp"):
             ]
         )
     }
-    df = (
-        sum(
-            [
-                ds[[f"{g} sTSA{which}", f"Wt{ix} sTSA{which}"]]
-                .to_dataframe()
-                .reset_index(drop=True)
-                .pivot(columns=f"{g} sTSA{which}", values=f"Wt{ix} sTSA{which}")
-                .fillna(0)
-                for ix, g in grps.items()
-            ]
+
+    def _get_wideform(ix, g):
+        return (
+            ds[[f"{g} sTSA{which}", f"Wt{ix} sTSA{which}"]]
+            .to_dataframe()
+            .reset_index(drop=True)
+            .pivot(columns=f"{g} sTSA{which}", values=f"Wt{ix} sTSA{which}")
+            .fillna(0)
         )
-    ).set_index(ds.depth.values)
+
+    df = (sum([_get_wideform(ix, g) for ix, g in grps.items()])).set_index(
+        ds.depth.values if "depth" in ds.indexes else ds.sample.values
+    )
     df.name = "sTSA{which}"
     df.columns.name = None
     return df.where(df > 0).dropna(how="all", axis=1)
 
 
-def products_to_group_table(ds: xarray.Dataset, which="S"):
+def products_to_group_table(ds: xarray.Dataset, which: str = "S") -> pd.DataFrame:
+    """
+    Summarize a TSG scalar/product table, aggregating the long-form
+    used in TSG to a full table.
+
+    Parameters
+    ----------
+    ds : xarray.Dataset
+        Product dataset, as loaded in tsg-xr.
+    which : str
+        Which subset to look at (e.g. S or V for NIR, T for TIR).
+
+    Returns
+    -------
+    pandas.DataFrame
+        Dataframe with groups as columns.
+    """
     return _product_summary_table(ds, which, level="Grp")
 
 
-def products_to_mineral_table(ds: xarray.Dataset, which="S"):
+def products_to_mineral_table(ds: xarray.Dataset, which: str = "S") -> pd.DataFrame:
+    """
+    Summarize a TSG scalar/product table, aggregating the long-form
+    used in TSG to a full table.
+
+    Parameters
+    ----------
+    ds : xarray.Dataset
+        Product dataset, as loaded in tsg-xr.
+    which : str
+        Which subset to look at (e.g. S or V for NIR, T for TIR).
+
+    Returns
+    -------
+    pandas.DataFrame
+        Dataframe with minerals as columns.
+    """
     return _product_summary_table(ds, which, level="Min")
