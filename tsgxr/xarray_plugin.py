@@ -16,9 +16,9 @@ from pytsg.parse_tsg import (
 from simplejpeg import decode_jpeg
 
 from .read import (
+    coords_from_sampleheaders,
     product_dataset_to_xarray,
     spectral_dataset_to_xarray,
-    coords_from_sampleheaders,
 )
 from .util import Handle
 
@@ -44,40 +44,6 @@ except ImportError:
                 pass
 
         return mgr()
-
-
-class TSGBIPBackend(xarray.backends.BackendEntrypoint):
-    """
-    An xarray backend to open a single TSG spectral dataset.
-    """
-
-    description = "Load TSG spectral datasets using xarray"
-
-    def open_dataset(
-        self,
-        filename_or_obj,
-        header_format="20s2I8h4I2h",
-        drop_variables=None,
-        lock=None,
-    ) -> xarray.Dataset:
-        self.lock = lock or get_lock()
-        fpath = Path(filename_or_obj)
-        tsg, bip = None, None
-        bip = fpath if fpath.suffix == ".bip" else fpath.with_suffix(".bip")
-        tsg = fpath if fpath.suffix == ".tsg" else fpath.with_suffix(".tsg")
-        if not bip.exists() and tsg.exists():
-            raise FileNotFoundError(
-                f"Missing file: {','.join(([bip.name] if not bip.exists() else []) + ([tsg.name] if not tsg.exists() else []))}"
-            )
-        spectra = read_tsg_bip_pair(tsg, bip, "a")
-        return spectral_dataset_to_xarray(spectra)
-
-    def guess_can_open(self, filename_or_obj: str | Path) -> bool:
-
-        fpath = Path(filename_or_obj)
-        return ((fpath.suffix == ".bip") and ("tsg" in fpath.stem)) or (
-            (fpath.suffix == ".tsg") and ("tsg" in fpath.stem)
-        )
 
 
 class BIPBackendArray(xarray.backends.BackendArray):
@@ -167,7 +133,7 @@ class BIPBackendArray(xarray.backends.BackendArray):
         return arr.loc[*key].values
 
 
-class LazyTSGBIPBackend(xarray.backends.BackendEntrypoint):
+class TSGBIPBackend(xarray.backends.BackendEntrypoint):
     """
     A lazy-loading xarray backend to open a single TSG spectral dataset.
     """
@@ -212,7 +178,9 @@ class LazyTSGBIPBackend(xarray.backends.BackendEntrypoint):
             ),
             backend_array.info["class"],
         )
-        return product_data.assign(Spectra=da[0])
+        ds = product_data.assign(Spectra=da[0])
+        ds.attrs.update(backend_array.info)
+        return ds
 
     def guess_can_open(self, filename_or_obj: str | Path) -> bool:
         fpath = Path(filename_or_obj)

@@ -392,9 +392,7 @@ def load_tsg(
     D = {}
     for f in spectral_bips:
         sset = SPECTRAL_MAPPING.get(f.stem.split("_")[-1])
-        ds = xarray.open_dataset(f, engine="lazytsg" if lazy else "tsg").drop_vars(
-            "half"
-        )
+        ds = xarray.open_dataset(f, engine="tsg").drop_vars("half")
         D = {
             **D,
             f"{sset}/Spectra": ds[["Spectra"]],
@@ -442,8 +440,6 @@ def load_tsg(
                     )
 
     DT = xarray.DataTree.from_dict(D)
-    # tsgdata = pytsg.parse_tsg.read_package(directory, read_cras_file=False, **kwargs)
-    # DT: xarray.DataTree = tsg_to_xarray(tsgdata, index_coord=index_coord, chunks=chunks)
     if image:
         crasfile = list(directory.glob("*cras.bip*"))
         if crasfile:
