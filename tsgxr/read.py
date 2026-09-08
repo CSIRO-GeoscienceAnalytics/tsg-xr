@@ -36,7 +36,7 @@ def interpolate_section_depths(
         ninterp = np.ones(section_depths.shape[0]) * ninterp
     else:
         ninterp = np.array(ninterp)
-        assert ninterp.dtype.kind in ["i"]
+        assert ninterp.dtype.kind in ["i", "u"]
     return np.hstack(
         [np.linspace(mn, mx, nint) for (nint, (mn, mx)) in zip(ninterp, section_depths)]
     )

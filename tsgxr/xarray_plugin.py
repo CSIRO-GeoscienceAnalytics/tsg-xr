@@ -6,8 +6,6 @@ import numpy as np
 import xarray
 from pytsg.parse_tsg import (
     CrasHeader,
-    SectionInfo,
-    TrayInfo,
     _calculate_wavelengths,
     _find_header_sections,
     _parse_scalars,
@@ -231,8 +229,6 @@ class CRASBackend(xarray.backends.BackendEntrypoint):
         self,
         filename_or_obj,
         header_format="20s2I8h4I2h",
-        tray_info_format: str = "3f2i",
-        section_info_format: str = "4f3i",
         drop_variables=None,
         lock=None,
     ) -> xarray.Dataset:
@@ -290,15 +286,35 @@ class CRASBackend(xarray.backends.BackendEntrypoint):
             ).astype(np.uint64)
             file.seek(info_table_start)
 
-            self.tray: list[TrayInfo] = [
-                TrayInfo(*struct.unpack(tray_info_format, file.read(20)))
-                for i in range(self.header.ntrays)
-            ]
+            self.tray = np.rec.array(
+                np.fromfile(
+                    file,
+                    dtype=[
+                        ("utlengthmm", "f4"),
+                        ("baseheightmm", "f4"),
+                        ("coreheightmm", "f4"),
+                        ("nsections", "u4"),
+                        ("nlines", "u4"),
+                    ],
+                    count=self.header.ntrays,
+                )
+            )
 
-            self.section: list = [
-                SectionInfo(*struct.unpack(section_info_format, file.read(28)))
-                for i in range(self.header.nsections)
-            ]
+            self.section = np.rec.array(
+                np.fromfile(
+                    file,
+                    dtype=[
+                        ("utlengthmm", "f4"),
+                        ("startmm", "f4"),
+                        ("endmm", "f4"),
+                        ("trimwidthmm", "f4"),
+                        ("startcol", "u4"),
+                        ("endcol", "u4"),
+                        ("nlines", "u4"),
+                    ],
+                    count=self.header.nsections,
+                )
+            )
 
         da = xarray.DataArray(
             data=cras,
@@ -307,19 +323,13 @@ class CRASBackend(xarray.backends.BackendEntrypoint):
                 "section": (
                     "x",
                     np.hstack(
-                        [
-                            np.ones(s.nlines, dtype="int32") * ix
-                            for ix, s in enumerate(self.section)
-                        ]
+                        [np.ones(n) * ix for ix, n in enumerate(self.tray.nlines)]
                     ),
                 ),
                 "tray": (
                     "x",
                     np.hstack(
-                        [
-                            np.ones(s.nlines, dtype="int32") * ix
-                            for ix, s in enumerate(self.tray)
-                        ]
+                        [np.ones(n) * ix for ix, n in enumerate(self.section.nlines)]
                     ),
                 ),
                 "channel": np.arange(3),
@@ -343,8 +353,6 @@ class CRASBackendArray(xarray.backends.BackendArray):
         lock=None,
         chunks=None,
         header_format: str = "20s2I8h4I2h",
-        tray_info_format: str = "3f2I",
-        section_info_format: str = "4f3I",
     ):
         self.filename_or_obj = filename_or_obj
         self.lock = lock
@@ -378,15 +386,35 @@ class CRASBackendArray(xarray.backends.BackendArray):
             ).astype(np.uint64)
             file.seek(info_table_start)
 
-            self.tray: list[TrayInfo] = [
-                TrayInfo(*struct.unpack(tray_info_format, file.read(20)))
-                for i in range(self.header.ntrays)
-            ]
+            self.tray = np.rec.array(
+                np.fromfile(
+                    file,
+                    dtype=[
+                        ("utlengthmm", "f4"),
+                        ("baseheightmm", "f4"),
+                        ("coreheightmm", "f4"),
+                        ("nsections", "u4"),
+                        ("nlines", "u4"),
+                    ],
+                    count=self.header.ntrays,
+                )
+            )
 
-            self.section: list[SectionInfo] = [
-                SectionInfo(*struct.unpack(section_info_format, file.read(28)))
-                for i in range(self.header.nsections)
-            ]
+            self.section = np.rec.array(
+                np.fromfile(
+                    file,
+                    dtype=[
+                        ("utlengthmm", "f4"),
+                        ("startmm", "f4"),
+                        ("endmm", "f4"),
+                        ("trimwidthmm", "f4"),
+                        ("startcol", "u4"),
+                        ("endcol", "u4"),
+                        ("nlines", "u4"),
+                    ],
+                    count=self.header.nsections,
+                )
+            )
 
         self.shape = (self.header.nl, self.header.ns, self.header.nb)
         self.imgshape = (self.header.chunksize, self.header.ns, self.header.nb)
@@ -473,8 +501,8 @@ class LazyCRASBackend(xarray.backends.BackendEntrypoint):
                     "x",
                     np.hstack(
                         [
-                            np.ones(s.nlines, dtype="int32") * ix
-                            for ix, s in enumerate(backend_array.section)
+                            np.ones(n) * ix
+                            for ix, n in enumerate(backend_array.tray.nlines)
                         ]
                     ),
                 ),
@@ -482,8 +510,8 @@ class LazyCRASBackend(xarray.backends.BackendEntrypoint):
                     "x",
                     np.hstack(
                         [
-                            np.ones(s.nlines, dtype="int32") * ix
-                            for ix, s in enumerate(backend_array.tray)
+                            np.ones(n) * ix
+                            for ix, n in enumerate(backend_array.section.nlines)
                         ]
                     ),
                 ),
