@@ -249,10 +249,10 @@ class CRASBackend(xarray.backends.BackendEntrypoint):
 
             diff_offset = np.diff(self.offsets, prepend=1).astype(np.uint64)
             overflow_finder = np.where(diff_offset < -1)[0].astype(np.uint64)
-            if len(overflow_finder) > 1:
+            if overflow_finder.size > 1:
                 raise IndexError("Chunk offset array wraps around more than once")
 
-            if len(overflow_finder) > 0:
+            if overflow_finder.size:
                 # add np.int32 max to the offset array this should be ok, unless there is a case where there is more than 1 overflow,
                 # in which case I expect the cras reading component to crash
                 self.offsets[overflow_finder[0] :] += np.int64(
@@ -361,10 +361,10 @@ class CRASBackendArray(xarray.backends.BackendArray):
 
             diff_offset = np.diff(self.offsets, prepend=1).astype(np.uint64)
             overflow_finder = np.where(diff_offset < -1)[0].astype(np.uint64)
-            if len(overflow_finder) > 1:
+            if overflow_finder.size > 1:
                 raise IndexError("Chunk offset array wraps around more than once")
 
-            if len(overflow_finder) > 0:
+            if overflow_finder.size:
                 # add np.int32 max to the offset array this should be ok, unless there is a case where there is more than 1 overflow,
                 # in which case I expect the cras reading component to crash
                 self.offsets[overflow_finder[0] :] += np.int64(
