@@ -343,8 +343,8 @@ class CRASBackendArray(xarray.backends.BackendArray):
         lock=None,
         chunks=None,
         header_format: str = "20s2I8h4I2h",
-        tray_info_format: str = "3f2i",
-        section_info_format: str = "4f3i",
+        tray_info_format: str = "3f2I",
+        section_info_format: str = "4f3I",
     ):
         self.filename_or_obj = filename_or_obj
         self.lock = lock
