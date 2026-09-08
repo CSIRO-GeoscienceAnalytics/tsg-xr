@@ -52,6 +52,7 @@ def _product_summary_table(
     )
     df.name = "sTSA{which}"
     df.columns.name = None
+    df.columns.name = next(iter(ds.dims))
     return df.where(df > 0).dropna(how="all", axis=1)
 
 
@@ -93,3 +94,23 @@ def products_to_mineral_table(ds: xarray.Dataset, which: str = "sTSAS") -> pd.Da
         Dataframe with minerals as columns.
     """
     return _product_summary_table(ds, which, level="Min")
+
+
+def get_product_colormap(ds: xarray.Dataset, which: str = "sTSAS"):
+    pcls = next(
+        iter(
+            [
+                v
+                for ix, v in ds.attrs["class"].items()
+                # these seem to be _ delimited
+                if f"{which[0]}_{which[1:]}".upper() in v.name.upper()
+            ]
+        )
+    )
+    return {
+        c: f"#{color:06x}"
+        for c, color in zip(
+            pcls.classes.values(),
+            pcls.colors,
+        )
+    }  #

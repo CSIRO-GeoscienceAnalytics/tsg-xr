@@ -194,12 +194,6 @@ def product_dataset_to_xarray(scalars: pd.DataFrame, classes: dict) -> xarray.Da
     xarray.Dataset
     """
     scalar_data = scalars.copy()  # pd.DataFrame
-    floatvals = scalar_data.select_dtypes(float).columns
-    scalar_data[floatvals] = np.where(
-        np.isclose(scalar_data.loc[:, floatvals].values, np.finfo("float32").min),
-        np.nan,
-        scalar_data.loc[:, floatvals.values],
-    )
     # could drop emtpy columns but is unlikely to be many
     products = scalar_data.set_index(
         pd.Series(scalar_data.index.values, name="sample")

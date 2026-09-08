@@ -3,23 +3,18 @@ from pathlib import Path
 
 import joblib
 import numpy as np
+import pandas as pd
 import xarray
 from pytsg.parse_tsg import (
     CrasHeader,
     _calculate_wavelengths,
     _find_header_sections,
-    _parse_scalars,
     _parse_tsg,
     _read_tsg_file,
-    read_tsg_bip_pair,
 )
 from simplejpeg import decode_jpeg
 
-from .read import (
-    coords_from_sampleheaders,
-    product_dataset_to_xarray,
-    spectral_dataset_to_xarray,
-)
+from .read import coords_from_sampleheaders, product_dataset_to_xarray
 from .util import Handle
 
 logger = Handle(__name__)
@@ -44,6 +39,36 @@ except ImportError:
                 pass
 
         return mgr()
+
+
+def parse_scalars(
+    scalars: np.ndarray,
+    classes: "list[ClassHeaders]",
+    bandheaders: "list[BandHeaders]",
+    nodata: int = -1,
+) -> pd.DataFrame:
+    """
+    Map scalar values to classes, where appropriate.
+    """
+    df = pd.DataFrame(
+        {
+            band.name: (
+                np.where(
+                    np.isclose(scalars[:, band.band], np.finfo("float32").min),
+                    -1,
+                    scalars[:, band.band],
+                )
+            )
+            for band in bandheaders
+        }
+    )
+
+    for band in bandheaders:
+        if (band.flag == 2) & (band.class_number > -1):
+            df[band.name] = pd.Series(df[band.name].astype(np.int16)).map(
+                classes[int(band.class_number)].classes
+            )
+    return df
 
 
 class BIPBackendArray(xarray.backends.BackendArray):
@@ -170,8 +195,9 @@ class TSGBIPBackend(xarray.backends.BackendEntrypoint):
                 "wavelength": ("band", backend_array.wavelength),
             },
         )
+
         product_data = product_dataset_to_xarray(  # products always loads
-            _parse_scalars(
+            parse_scalars(
                 da[1].values,
                 backend_array.info["class"],
                 backend_array.info["band headers"],
