@@ -392,9 +392,9 @@ def load_tsg(
     D = {}
     for f in spectral_bips:
         sset = SPECTRAL_MAPPING.get(f.stem.split("_")[-1])
-        ds = xarray.open_dataset(
-            f, engine="lazytsg" if lazy else "tsg", chunks=chunks
-        ).drop_vars("half")
+        ds = xarray.open_dataset(f, engine="lazytsg" if lazy else "tsg").drop_vars(
+            "half"
+        )
         D = {
             **D,
             f"{sset}/Spectra": ds[["Spectra"]],
@@ -402,7 +402,7 @@ def load_tsg(
         }
     lidar = next(directory.glob("*tsg_hires.dat*"))
     if lidar:
-        prof_da = xarray.DataArray(
+        prof_da = xarray.DataArray(  # TODO: lazy loader?
             pytsg.parse_tsg.read_hires_dat(lidar), dims=("sample",)
         ).assign_coords(
             {
@@ -419,15 +419,27 @@ def load_tsg(
                 if isinstance(chunks, int)
                 else {k: v for k, v in chunks.items() if k in prof_da.dims}
             )
-        D["Lidar"] = prof_da.chunk().to_dataset(name="Lidar")
+        D["Lidar"] = prof_da.to_dataset(name="Lidar")
 
     if index_coord == "depth":  # TODO: rechunk?
         for k in D:
             if "Products" in k:
                 D[k] = _reindex_depth(D[k], template=D[f"{k.split('/')[0]}/Spectra"])
+                if chunks:
+                    D[k] = D[k].chunk(
+                        chunks
+                        if isinstance(chunks, int)
+                        else {k: v for k, v in chunks.items() if k in D[k].dims}
+                    )
         for k in D:
             if "Spectra" in k:
                 D[k] = _reindex_depth(D[k])
+                if chunks:
+                    D[k] = D[k].chunk(
+                        chunks
+                        if isinstance(chunks, int)
+                        else {k: v for k, v in chunks.items() if k in D[k].dims}
+                    )
 
     DT = xarray.DataTree.from_dict(D)
     # tsgdata = pytsg.parse_tsg.read_package(directory, read_cras_file=False, **kwargs)
@@ -442,7 +454,7 @@ def load_tsg(
             )
         else:
             image_ds = xarray.open_dataset(
-                crasfile, engine="lazycras" if lazy else "cras", chunks=chunks
+                crasfile, engine="lazycras" if lazy else "cras"
             )
             section_depths = (
                 (
@@ -468,7 +480,7 @@ def load_tsg(
             if index_coord == "depth":
                 # there are no duplicate depths in the image, so we dont' need to deduplicate this
                 # TODO: assign sample-based coordinates as per depth ranges in the deduplicated sample spectra image
-                DT["Image"] = (
+                image_ds = (
                     image_ds.swap_dims({"x": "depth"})
                     .swap_dims({"y": "width"})
                     .sortby("depth")
@@ -491,7 +503,7 @@ def load_tsg(
                 pixels_per_sample = int(pixels_per_sample)
                 # the image will have its own depth but otherwise the sample coords should transfer
 
-                DT["Image"] = image_ds.assign_coords(
+                image_ds = image_ds.assign_coords(
                     {
                         k: ("x", np.repeat(v.values, pixels_per_sample))
                         for k, v in ds["Spectra"].coords.items()
@@ -499,4 +511,11 @@ def load_tsg(
                     }
                 )
 
+            if chunks:
+                image_ds = image_ds.chunk(
+                    chunks
+                    if isinstance(chunks, int)
+                    else {k: v for k, v in chunks.items() if k in image_ds.dims}
+                )
+            DT["Image"] = image_ds
     return DT
