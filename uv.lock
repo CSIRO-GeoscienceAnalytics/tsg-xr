@@ -2010,7 +2010,7 @@ wheels = [
 [[package]]
 name = "pytsg"
 version = "0.5.0"
-source = { registry = "https://pypi.org/simple" }
+source = { git = "https://github.com/Geological-Survey-of-Western-Australia/pytsg.git#8c5fb3219757c51db5c6dec5a0da3a6dbe402fb7" }
 dependencies = [
     { name = "dhcomp" },
     { name = "numpy", version = "2.4.6", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.12'" },
@@ -2019,10 +2019,6 @@ dependencies = [
     { name = "scipy", version = "1.17.1", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.12'" },
     { name = "scipy", version = "1.18.1", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.12'" },
     { name = "simplejpeg" },
-]
-sdist = { url = "https://files.pythonhosted.org/packages/8d/a2/82530310748d2c8c91513f2799e97ac15de0e0e257c38aac411ddd436dd6/pytsg-0.5.0.tar.gz", hash = "sha256:0814539f685ca3a437a3a9b2db674dd58dd307c8f8e2accd87593215c46e3bb7", size = 18242, upload-time = "2025-10-18T06:37:47.026Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/87/39/27fe46b75dd0025a66ae6e1b6ee72a8ef997a1093d33ed161ff0289f4c42/pytsg-0.5.0-py3-none-any.whl", hash = "sha256:ad176eff9bb2d085aedc7d886ae80e21e600aaa530b1799d31e33f64b2d9b25d", size = 16766, upload-time = "2025-10-18T06:37:45.87Z" },
 ]
 
 [[package]]
@@ -2866,6 +2862,7 @@ source = { editable = "." }
 dependencies = [
     { name = "dask" },
     { name = "joblib" },
+    { name = "matplotlib" },
     { name = "numpy", version = "2.4.6", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.12'" },
     { name = "numpy", version = "2.5.3", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.12'" },
     { name = "pandas" },
@@ -2882,7 +2879,6 @@ dev = [
     { name = "coverage" },
     { name = "docutils" },
     { name = "ipykernel" },
-    { name = "matplotlib" },
     { name = "myst-parser" },
     { name = "nbsphinx" },
     { name = "pytest" },
@@ -2907,10 +2903,6 @@ docs = [
 ]
 notebook = [
     { name = "ipykernel" },
-    { name = "matplotlib" },
-]
-plot = [
-    { name = "matplotlib" },
 ]
 test = [
     { name = "coverage" },
@@ -2927,15 +2919,14 @@ requires-dist = [
     { name = "ipykernel", marker = "extra == 'docs'" },
     { name = "ipykernel", marker = "extra == 'notebook'" },
     { name = "joblib" },
-    { name = "matplotlib", marker = "extra == 'notebook'" },
-    { name = "matplotlib", marker = "extra == 'plot'" },
+    { name = "matplotlib" },
     { name = "myst-parser", marker = "extra == 'docs'" },
     { name = "nbsphinx", marker = "extra == 'docs'" },
     { name = "numpy" },
     { name = "pandas" },
     { name = "pytest", marker = "extra == 'test'" },
     { name = "pytest-cov", marker = "extra == 'test'" },
-    { name = "pytsg", specifier = ">=0.2.8" },
+    { name = "pytsg", git = "https://github.com/Geological-Survey-of-Western-Australia/pytsg.git" },
     { name = "ruff", marker = "extra == 'dev'" },
     { name = "sphinx", marker = "extra == 'docs'", specifier = ">=4" },
     { name = "sphinx-autodoc-annotation", marker = "extra == 'docs'" },
@@ -2946,7 +2937,7 @@ requires-dist = [
     { name = "xarray", specifier = ">=2025" },
     { name = "zarr" },
 ]
-provides-extras = ["plot", "notebook", "docs", "test", "dev"]
+provides-extras = ["notebook", "docs", "test", "dev"]
 
 [[package]]
 name = "typer"

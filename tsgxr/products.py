@@ -1,3 +1,6 @@
+import matplotlib.axes
+import matplotlib.pyplot as plt
+import numpy as np
 import pandas as pd
 import xarray
 
@@ -96,6 +99,12 @@ def products_to_mineral_table(ds: xarray.Dataset, which: str = "sTSAS") -> pd.Da
     return _product_summary_table(ds, which, level="Min")
 
 
+def bgrint_to_rgb(v: int):
+    # fractional RGB from bgr integer
+    # https://github.com/AuScope/nvcl_kit/blob/2ab72a9c2133715a1ffc75af282e2824b2681bca/nvcl_kit/reader.py#L62-L68
+    return ((v & 255) / 255.0, ((v & 65280) >> 8) / 255.0, (v >> 16) / 255.0)
+
+
 def get_product_colormap(ds: xarray.Dataset, which: str = "sTSAS"):
     pcls = next(
         iter(
@@ -108,9 +117,80 @@ def get_product_colormap(ds: xarray.Dataset, which: str = "sTSAS"):
         )
     )
     return {
-        c: f"#{color:06x}"
+        c: bgrint_to_rgb(color)
         for c, color in zip(
             pcls.classes.values(),
             pcls.colors,
         )
-    }  #
+    }
+
+
+def plot_product_downhole(
+    ds: xarray.Dataset,
+    which: str,
+    step: float | None = None,
+    ax: matplotlib.axes.Axes | None = None,
+    invert: bool = True,
+):
+    """
+    Make a downhole plot of spectral product/scalar data.
+
+    Parameters
+    ----------
+    ds : xarray.Dataset
+        Dataset containing products. Whichever coordinate is used
+        as an index here will be used in the downhole dimension.
+    which : str
+        Which product set to plot (e.g. 'sjCLST').
+    step : float
+        Step to use for compositing, if any. In metres where the
+        dataset supplied is indexed by depth (any step > 0.02 makes sense),
+        else in sample numbers (i.e. you want to use a step >= 2).
+    ax : matplotlib.axes.Axes
+        Existing axis to plot on, if one already exists.
+    invert : bool
+        Whether to invert the yaxis on the plot such that depth
+        increases downwards.
+
+    Returns
+    -------
+    matplotlib.axes.Axes
+    """
+    products = products_to_mineral_table(ds, which=which)
+    colormap = get_product_colormap(ds, which=which)
+    if step is not None:
+        nsteps = (products.index.values[-1] - products.index.values[0]) // step + 1
+        products = products.groupby(
+            pd.cut(products.index, products.index.values[0] + np.arange(nsteps) * step),
+            observed=False,
+        ).agg(lambda x: np.nansum(x) / len(x))
+        products.index = products.index.map(
+            dict(
+                zip(
+                    products.index.categories,
+                    products.index.categories.map(lambda c: (c.left + c.right) / 2),
+                )
+            )
+        ).values
+
+    if ax is None:
+        _fig, ax = plt.subplots(1, figsize=(6, 15))
+
+    bottom = 0
+    for c in products.columns:
+        ax.barh(
+            y=products.index,
+            width=products[c],
+            label=c,
+            height=step,
+            left=bottom,
+            color=colormap[c],
+        )
+        bottom += products[c].values
+
+    ax.legend(bbox_to_anchor=(1, 1), loc="upper left", frameon=False)
+    ax.set(ylabel="Depth" if next(iter(ds.dims)) == "depth" else "Sample")
+    ax.set(title=which)
+    if invert:
+        ax.invert_yaxis()
+    return ax
