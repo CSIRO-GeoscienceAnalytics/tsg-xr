@@ -290,17 +290,15 @@ class CRASBackend(xarray.backends.BackendEntrypoint):
             ).astype(np.uint64)
             file.seek(info_table_start)
 
-            self.tray: list[TrayInfo] = []
-            for i in range(self.header.ntrays):
-                bytes = file.read(20)
-                self.tray.append(TrayInfo(*struct.unpack(tray_info_format, bytes)))
+            self.tray: list[TrayInfo] = [
+                TrayInfo(*struct.unpack(tray_info_format, file.read(20)))
+                for i in range(self.header.ntrays)
+            ]
 
-            self.section: list[SectionInfo] = []
-            for i in range(self.header.nsections):
-                bytes = file.read(28)
-                self.section.append(
-                    SectionInfo(*struct.unpack(section_info_format, bytes))
-                )
+            self.section: list = [
+                SectionInfo(*struct.unpack(section_info_format, file.read(28)))
+                for i in range(self.header.nsections)
+            ]
 
         da = xarray.DataArray(
             data=cras,
@@ -380,17 +378,15 @@ class CRASBackendArray(xarray.backends.BackendArray):
             ).astype(np.uint64)
             file.seek(info_table_start)
 
-            self.tray: list[TrayInfo] = []
-            for i in range(self.header.ntrays):
-                bytes = file.read(20)
-                self.tray.append(TrayInfo(*struct.unpack(tray_info_format, bytes)))
+            self.tray: list[TrayInfo] = [
+                TrayInfo(*struct.unpack(tray_info_format, file.read(20)))
+                for i in range(self.header.ntrays)
+            ]
 
-            self.section: list[SectionInfo] = []
-            for i in range(self.header.nsections):
-                bytes = file.read(28)
-                self.section.append(
-                    SectionInfo(*struct.unpack(section_info_format, bytes))
-                )
+            self.section: list[SectionInfo] = [
+                SectionInfo(*struct.unpack(section_info_format, file.read(28)))
+                for i in range(self.header.nsections)
+            ]
 
         self.shape = (self.header.nl, self.header.ns, self.header.nb)
         self.imgshape = (self.header.chunksize, self.header.ns, self.header.nb)
