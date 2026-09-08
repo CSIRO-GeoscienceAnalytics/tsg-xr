@@ -53,8 +53,6 @@ class TSGBIPBackend(xarray.backends.BackendEntrypoint):
         self,
         filename_or_obj,
         header_format="20s2I8h4I2h",
-        tray_info_format: str = "3f2i",
-        section_info_format: str = "4f3i",
         drop_variables=None,
         lock=None,
     ) -> xarray.Dataset:
@@ -153,10 +151,10 @@ class BIPBackendArray(xarray.backends.BackendArray):
 
         arr = xarray.DataArray(
             arr,
-            dims=("band", "sample", "wavelength"),
+            dims=("half", "sample", "wavelength"),
             coords={
-                "band": np.arange(2),
-                "sample": np.arange(start, stop),
+                "half": np.arange(2),
+                "sample": np.arange(start, stop, dtype="uint64"),
                 "wavelength": self.wavelength,
             },
         )
@@ -192,13 +190,13 @@ class LazyTSGBIPBackend(xarray.backends.BackendEntrypoint):
         # lazy data array representing the spectral array
         da = xarray.DataArray(
             data=xarray.core.indexing.LazilyIndexedArray(backend_array),
-            dims=("band", "sample", "wavelength"),
+            dims=("half", "sample", "band"),
             coords={
-                "band": np.arange(2),
+                "half": np.arange(2),
                 "sample": np.arange(
-                    0, backend_array.info["coordinates"]["lastsample"], dtype=np.int32
+                    0, backend_array.info["coordinates"]["lastsample"], dtype="uint64"
                 ),
-                "wavelength": backend_array.wavelength,
+                "wavelength": ("band", backend_array.wavelength),
             },
         )
         product_data = product_dataset_to_xarray(  # products always loads
@@ -243,7 +241,7 @@ class CRASBackend(xarray.backends.BackendEntrypoint):
                 file.read(4 * (self.header.nchunks + 1)),
             ).astype(np.uint64)  # deal with +4gb cras files by using uint64
 
-            diff_offset = np.diff(self.offsets, prepend=1).astype(np.uint64)
+            diff_offset = np.diff(self.offsets, prepend=1)  # this needs to be signed
             overflow_finder = np.where(diff_offset < -1)[0].astype(np.uint64)
             if overflow_finder.size > 1:
                 raise IndexError("Chunk offset array wraps around more than once")
@@ -251,7 +249,7 @@ class CRASBackend(xarray.backends.BackendEntrypoint):
             if overflow_finder.size:
                 # add np.int32 max to the offset array this should be ok, unless there is a case where there is more than 1 overflow,
                 # in which case I expect the cras reading component to crash
-                self.offsets[overflow_finder[0] :] += np.int64(
+                self.offsets[overflow_finder[0] :] += np.uint64(
                     np.iinfo(np.uint32).max + 1
                 )
 
@@ -323,13 +321,19 @@ class CRASBackend(xarray.backends.BackendEntrypoint):
                 "section": (
                     "x",
                     np.hstack(
-                        [np.ones(n) * ix for ix, n in enumerate(self.tray.nlines)]
+                        [
+                            np.ones(n, dtype="uint64") * ix
+                            for ix, n in enumerate(self.tray.nlines)
+                        ]
                     ),
                 ),
                 "tray": (
                     "x",
                     np.hstack(
-                        [np.ones(n) * ix for ix, n in enumerate(self.section.nlines)]
+                        [
+                            np.ones(n, dtype="uint64") * ix
+                            for ix, n in enumerate(self.section.nlines)
+                        ]
                     ),
                 ),
                 "channel": np.arange(3),
@@ -367,7 +371,7 @@ class CRASBackendArray(xarray.backends.BackendArray):
                 file.read(4 * (self.header.nchunks + 1)),
             ).astype(np.uint64)  # deal with +4gb cras files by using uint64
 
-            diff_offset = np.diff(self.offsets, prepend=1).astype(np.uint64)
+            diff_offset = np.diff(self.offsets, prepend=1)  # this needs to be signed
             overflow_finder = np.where(diff_offset < -1)[0].astype(np.uint64)
             if overflow_finder.size > 1:
                 raise IndexError("Chunk offset array wraps around more than once")
@@ -375,9 +379,10 @@ class CRASBackendArray(xarray.backends.BackendArray):
             if overflow_finder.size:
                 # add np.int32 max to the offset array this should be ok, unless there is a case where there is more than 1 overflow,
                 # in which case I expect the cras reading component to crash
-                self.offsets[overflow_finder[0] :] += np.int64(
+                self.offsets[overflow_finder[0] :] += np.uint64(
                     np.iinfo(np.uint32).max + 1
                 )
+
             info_table_start = (
                 64
                 + (self.header.nchunks + 1) * 4
@@ -464,7 +469,8 @@ class CRASBackendArray(xarray.backends.BackendArray):
             arr,
             dims=("x", "y", "channel"),
             coords={
-                "x": np.arange(arr.shape[0]) + self.header.chunksize * chunkidx_start,
+                "x": np.arange(arr.shape[0], dtype="uint64")
+                + self.header.chunksize * chunkidx_start,
             },
         )
         if isinstance(key, int):
@@ -501,7 +507,7 @@ class LazyCRASBackend(xarray.backends.BackendEntrypoint):
                     "x",
                     np.hstack(
                         [
-                            np.ones(n) * ix
+                            np.ones(n, dtype="uint64") * ix
                             for ix, n in enumerate(backend_array.tray.nlines)
                         ]
                     ),
@@ -510,7 +516,7 @@ class LazyCRASBackend(xarray.backends.BackendEntrypoint):
                     "x",
                     np.hstack(
                         [
-                            np.ones(n) * ix
+                            np.ones(n, dtype="uint64") * ix
                             for ix, n in enumerate(backend_array.section.nlines)
                         ]
                     ),

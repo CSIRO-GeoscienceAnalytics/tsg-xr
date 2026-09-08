@@ -78,7 +78,7 @@ def coords_from_sampleheaders(spectraldata: pytsg.parse_tsg.Spectra) -> dict:
     # post-processed to be used as an index
     coords = {
         "sample": sampleheaders["sample"].values,
-        "wavelength": spectraldata.wavelength,
+        "wavelength": ("band", spectraldata.wavelength),
     }
     coords.update(
         {
@@ -260,7 +260,7 @@ def spectral_dataset_to_xarray(
     spectra_da = xarray.DataArray(
         spectra.spectra,
         coords=_coords,
-        dims=("sample", "wavelength"),
+        dims=("sample", "band"),
     )
     if index_coord == "depth":
         # have to do products first, otherwise spectra_da is changed
@@ -323,7 +323,7 @@ def tsg_to_xarray(
             DT[subset.upper()] = xarray.DataTree.from_dict(
                 {
                     "Spectra": specds["Spectra"].to_dataset(name="Spectra"),
-                    "Products": specds.drop_vars("Spectra").drop_dims("wavelength"),
+                    "Products": specds.drop_vars("Spectra").drop_dims("band"),
                 }
             )
 
