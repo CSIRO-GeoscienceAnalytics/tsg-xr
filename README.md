@@ -17,12 +17,12 @@ data structure which allows easier subseqent use (and serialization to indexable
 ## Usage
 
 `tsg-xr` is intended to be used to read directories containing ensembles of TSG files; 
-to do so just point the `load_tsg` funnction at the appropriate directory:
+to do so just point the `open_tsg` funnction at the appropriate directory:
 
 ```python
-from tsgxr import load_tsg
+from tsgxr import open_tsg
 
-DT : xarray.DataTree = load_tsg("./Hylogger_Hole_42")
+DT : xarray.DataTree = open_tsg("./Hylogger_Hole_42")
 ```
 
 ---
@@ -111,7 +111,7 @@ An example of the data structure used is given below, for the `STAVELY_17` hole 
 some of this structure's orientation):
 
 ```python
-DT : xarray.DataTree = load_tsg(
+DT : xarray.DataTree = open_tsg(
     "./07e4dcac-5216-44a6-9a6b-0c4c1f7ce7d", index_coord="depth", lazy=True, chunks=512
 )
 ```
@@ -206,10 +206,10 @@ planning to load the whole dataset (at least at once), including where the image
 
 Loading the whole dataset *without an image*:
 ```python
-> %timeit load_tsg(hyloggerdir, image=False, lazy=False) # tsg-xr
+> %timeit open_tsg(hyloggerdir, image=False, lazy=False) # tsg-xr
 3.04 s ± 158 ms per loop (mean ± std. dev. of 7 runs, 1 loop each)
 
-> %timeit load_tsg(hyloggerdir, image=False, lazy=True) # lazy tsg-xr
+> %timeit open_tsg(hyloggerdir, image=False) # lazy tsg-xr
 2.65 s ± 144 ms per loop (mean ± std. dev. of 7 runs, 1 loop each)
 
 > %timeit read_package(hyloggerdir, read_cras_file=False) # pytsg
@@ -219,10 +219,10 @@ Loading the whole dataset *without an image*:
 Loading the dataset *with an image*:
 
 ```python
-%timeit load_tsg(hyloggerdir, image=True) # tsg-xr
+%timeit open_tsg(hyloggerdir, image=True, lazy=False) # tsg-xr
 7.06 s ± 955 ms per loop (mean ± std. dev. of 7 runs, 1 loop each)
 
-%timeit load_tsg(hyloggerdir, image=True, lazy=True) # lazy tsg-xr
+%timeit open_tsg(hyloggerdir, image=True) # lazy tsg-xr
 2.98 s ± 372 ms per loop (mean ± std. dev. of 7 runs, 1 loop each)
 
 %timeit read_package(hyloggerdir, read_cras_file=True) # pytsg

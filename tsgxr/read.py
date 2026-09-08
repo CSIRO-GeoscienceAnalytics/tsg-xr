@@ -356,16 +356,16 @@ def tsg_to_xarray(
     return DT
 
 
-def load_tsg(
+def open_tsg(
     directory,
     image=True,
     index_coord="sample",
-    lazy=False,
+    lazy=True,
     chunks=None,
     **kwargs,
 ):
     """
-    Load a TSG dataset.
+    Open a TSG dataset.
 
     Parameters
     ----------
@@ -393,6 +393,8 @@ def load_tsg(
     for f in spectral_bips:
         sset = SPECTRAL_MAPPING.get(f.stem.split("_")[-1])
         ds = xarray.open_dataset(f, engine="tsg").drop_vars("half")
+        if not lazy:
+            ds = ds.load()
         D = {
             **D,
             f"{sset}/Spectra": ds[["Spectra"]],
