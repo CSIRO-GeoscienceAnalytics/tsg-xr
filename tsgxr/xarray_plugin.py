@@ -322,7 +322,7 @@ class CRASBackend(xarray.backends.BackendEntrypoint):
                     "x",
                     np.hstack(
                         [
-                            np.ones(n, dtype="uint64") * ix
+                            np.ones(n, dtype="uint16") * ix
                             for ix, n in enumerate(self.tray.nlines)
                         ]
                     ),
@@ -331,7 +331,7 @@ class CRASBackend(xarray.backends.BackendEntrypoint):
                     "x",
                     np.hstack(
                         [
-                            np.ones(n, dtype="uint64") * ix
+                            np.ones(n, dtype="uint16") * ix
                             for ix, n in enumerate(self.section.nlines)
                         ]
                     ),
@@ -507,7 +507,7 @@ class LazyCRASBackend(xarray.backends.BackendEntrypoint):
                     "x",
                     np.hstack(
                         [
-                            np.ones(n, dtype="uint64") * ix
+                            np.ones(n, dtype="uint16") * ix
                             for ix, n in enumerate(backend_array.tray.nlines)
                         ]
                     ),
@@ -516,7 +516,7 @@ class LazyCRASBackend(xarray.backends.BackendEntrypoint):
                     "x",
                     np.hstack(
                         [
-                            np.ones(n, dtype="uint64") * ix
+                            np.ones(n, dtype="uint16") * ix
                             for ix, n in enumerate(backend_array.section.nlines)
                         ]
                     ),
