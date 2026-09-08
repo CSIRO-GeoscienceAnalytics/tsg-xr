@@ -15,7 +15,11 @@ from pytsg.parse_tsg import (
 )
 from simplejpeg import decode_jpeg
 
-from .read import product_dataset_to_xarray, spectral_dataset_to_xarray
+from .read import (
+    product_dataset_to_xarray,
+    spectral_dataset_to_xarray,
+    coords_from_sampleheaders,
+)
 from .util import Handle
 
 logger = Handle(__name__)
@@ -58,15 +62,13 @@ class TSGBIPBackend(xarray.backends.BackendEntrypoint):
     ) -> xarray.Dataset:
         self.lock = lock or get_lock()
         fpath = Path(filename_or_obj)
-        hdr, bip = None, None
+        tsg, bip = None, None
         bip = fpath if fpath.suffix == ".bip" else fpath.with_suffix(".bip")
         tsg = fpath if fpath.suffix == ".tsg" else fpath.with_suffix(".tsg")
-        hdr = next(fpath.parent.glob("*tsg.hdr"))
-        if not bip.exists() and tsg.exists() and hdr.exists():
+        if not bip.exists() and tsg.exists():
             raise FileNotFoundError(
-                f"Missing file: {','.join(([bip.name] if not bip.exists() else []) + ([tsg.name] if not tsg.exists() else []) + ([hdr.name] if not hdr.exists() else []))}"
+                f"Missing file: {','.join(([bip.name] if not bip.exists() else []) + ([tsg.name] if not tsg.exists() else []))}"
             )
-
         spectra = read_tsg_bip_pair(tsg, bip, "a")
         return spectral_dataset_to_xarray(spectra)
 
@@ -95,13 +97,12 @@ class BIPBackendArray(xarray.backends.BackendArray):
             chunks = {}
 
         fpath = Path(filename_or_obj)
-        self.tsg, self.bip, self.hdr = None, None, None
+        self.tsg, self.bip = None, None
         self.bip = fpath if fpath.suffix == ".bip" else fpath.with_suffix(".bip")
         self.tsg = fpath if fpath.suffix == ".tsg" else fpath.with_suffix(".tsg")
-        self.hdr = next(fpath.parent.glob("*tsg.hdr"))
-        if not self.bip.exists() and self.tsg.exists() and self.hdr.exists():
+        if not self.bip.exists() and self.tsg.exists():
             raise FileNotFoundError(
-                f"Missing file: {','.join(([self.bip.name] if not self.bip.exists() else []) + ([self.tsg.name] if not self.tsg.exists() else []) + ([self.hdr.name] if not self.hdr.exists() else []))}"
+                f"Missing file: {','.join(([self.bip.name] if not self.bip.exists() else []) + ([self.tsg.name] if not self.tsg.exists() else []))}"
             )
         self.fstr = _read_tsg_file(self.tsg)
         self.headers = _find_header_sections(self.fstr)
@@ -112,6 +113,9 @@ class BIPBackendArray(xarray.backends.BackendArray):
         self.info["coordinates"] = {
             k: int(v) for k, v in self.info["coordinates"].items()
         }
+        self.coords = coords_from_sampleheaders(
+            self.info["sample headers"], self.wavelength
+        )
         self.shape = (
             2,
             self.info["coordinates"]["lastsample"],
@@ -192,6 +196,7 @@ class LazyTSGBIPBackend(xarray.backends.BackendEntrypoint):
             data=xarray.core.indexing.LazilyIndexedArray(backend_array),
             dims=("half", "sample", "band"),
             coords={
+                **backend_array.coords,
                 "half": np.arange(2),
                 "sample": np.arange(
                     0, backend_array.info["coordinates"]["lastsample"], dtype="uint64"
