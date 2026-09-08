@@ -33,17 +33,17 @@ def _product_summary_table(
             [
                 v.split(" ")[0]
                 for v in ds.data_vars
-                if (v.startswith(level) and v.endswith(f"sTSA{which}"))
+                if (v.startswith(level) and v.endswith(f"{which}"))
             ]
         )
     }
 
     def _get_wideform(ix, g):
         return (
-            ds[[f"{g} sTSA{which}", f"Wt{ix} sTSA{which}"]]
+            ds[[f"{g} {which}", f"Wt{ix} {which}"]]
             .to_dataframe()
             .reset_index(drop=True)
-            .pivot(columns=f"{g} sTSA{which}", values=f"Wt{ix} sTSA{which}")
+            .pivot(columns=f"{g} {which}", values=f"Wt{ix} {which}")
             .fillna(0)
         )
 
@@ -55,7 +55,7 @@ def _product_summary_table(
     return df.where(df > 0).dropna(how="all", axis=1)
 
 
-def products_to_group_table(ds: xarray.Dataset, which: str = "S") -> pd.DataFrame:
+def products_to_group_table(ds: xarray.Dataset, which: str = "sTSAS") -> pd.DataFrame:
     """
     Summarize a TSG scalar/product table, aggregating the long-form
     used in TSG to a full table.
@@ -65,7 +65,7 @@ def products_to_group_table(ds: xarray.Dataset, which: str = "S") -> pd.DataFram
     ds : xarray.Dataset
         Product dataset, as loaded in tsg-xr.
     which : str
-        Which subset to look at (e.g. S or V for NIR, T for TIR).
+        Which subset to look at (e.g. sTSAS or sTSAV for NIR, T for TIR).
 
     Returns
     -------
@@ -75,7 +75,7 @@ def products_to_group_table(ds: xarray.Dataset, which: str = "S") -> pd.DataFram
     return _product_summary_table(ds, which, level="Grp")
 
 
-def products_to_mineral_table(ds: xarray.Dataset, which: str = "S") -> pd.DataFrame:
+def products_to_mineral_table(ds: xarray.Dataset, which: str = "sTSAS") -> pd.DataFrame:
     """
     Summarize a TSG scalar/product table, aggregating the long-form
     used in TSG to a full table.
@@ -85,7 +85,7 @@ def products_to_mineral_table(ds: xarray.Dataset, which: str = "S") -> pd.DataFr
     ds : xarray.Dataset
         Product dataset, as loaded in tsg-xr.
     which : str
-        Which subset to look at (e.g. S or V for NIR, T for TIR).
+        Which subset to look at (e.g. sTSAS or sTSAV for NIR, T for TIR).
 
     Returns
     -------
