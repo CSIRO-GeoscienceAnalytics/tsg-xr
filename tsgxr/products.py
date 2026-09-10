@@ -9,6 +9,32 @@ from .util import Handle
 logger = Handle(__name__)
 
 
+def get_system_subset_attrs(ds, which, level=None):
+    items = [
+        k
+        for k in ds.attrs
+        if (
+            k.upper().startswith(f"{which[0]}".upper())
+            and (
+                which[1:-1].upper() in k.upper()
+            )  # e.g. sTSAS needs to strip the last letter
+            and (
+                ("SWIR_TSA" in k.upper())
+                if "TSAS" in which
+                else (("VNIR_TSA" in k.upper()) if "TSAV" in which.upper() else True)
+            )
+        )
+    ]
+    if level is not None:
+        items = [
+            k
+            for k in items
+            if f"{'Groups' if level.upper().startswith('G') else 'Minerals'}".upper()
+            in k.upper()
+        ]
+    return items
+
+
 def _product_summary_table(
     ds: xarray.Dataset, which: str, level: str = "Grp"
 ) -> pd.DataFrame:
@@ -58,11 +84,8 @@ def _product_summary_table(
         iter(
             [
                 k
-                for k in ds.attrs
-                if k.upper().startswith(f"{which[0]}_{which[1:]}".upper())
-                and k.upper().endswith(
-                    f"{'Groups' if level.upper().startswith('G') else 'Minerals'}".upper()
-                )
+                for k in get_system_subset_attrs(ds, which=which, level=level)
+                if "Colors" not in k
             ]
         )
     )
@@ -127,19 +150,17 @@ def bgrint_to_rgb(v: int | np.ndarray):
 
 
 def get_product_colormap(ds: xarray.Dataset, which: str = "sTSAS", level="Grp"):
-    return next(
-        iter(
-            [
-                v
-                for k, v in ds.attrs.items()
-                # these seem to be _ delimited
-                if k.upper().startswith(f"{which[0]}_{which[1:]}".upper())
-                and k.upper().endswith(
-                    f"{'Groups' if level.upper().startswith('G') else 'Minerals'}_Colors".upper()
-                )
-            ]
+    return ds.attrs[
+        next(
+            iter(
+                [
+                    k
+                    for k in get_system_subset_attrs(ds, which=which, level=level)
+                    if "Colors" in k
+                ]
+            )
         )
-    )
+    ]
 
 
 def plot_product_downhole(
