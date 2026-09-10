@@ -14,7 +14,7 @@ except ImportError:
         return iterable
 
 
-from . import __version__, find_TSG_datasets, load_tsg
+from . import __version__, find_TSG_datasets, open_tsg
 from .util import Handle
 
 logger = Handle(__name__, level="INFO")
@@ -68,7 +68,7 @@ def TSG2zarr(
 
     if datasets:
         for k, d in tqdm(datasets.items()):
-            ds = load_tsg(d, image=image, index_coord=index_coord)
+            ds = open_tsg(d, image=image, index_coord=index_coord)
             name = f"{ds.coords['hole'][0].values!s}{'.zip' if zipfile else '.zarr'}"
             # put it in the TSG directory if an output folder is not given
             outdir = output_dir if output_dir is not None else d

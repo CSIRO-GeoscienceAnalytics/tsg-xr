@@ -3,21 +3,22 @@ from pathlib import Path
 
 import joblib
 import numpy as np
+import pandas as pd
 import xarray
 from pytsg.parse_tsg import (
     CrasHeader,
-    SectionInfo,
-    TrayInfo,
     _calculate_wavelengths,
     _find_header_sections,
-    _parse_scalars,
     _parse_tsg,
     _read_tsg_file,
-    read_tsg_bip_pair,
 )
 from simplejpeg import decode_jpeg
 
-from .read import product_dataset_to_xarray, spectral_dataset_to_xarray
+from .read import coords_from_sampleheaders, product_dataset_to_xarray
+from .util import Handle
+
+logger = Handle(__name__)
+
 
 try:
     import dask
@@ -40,42 +41,34 @@ except ImportError:
         return mgr()
 
 
-class TSGBIPBackend(xarray.backends.BackendEntrypoint):
+def parse_scalars(
+    scalars: np.ndarray,
+    classes: "list[ClassHeaders]",
+    bandheaders: "list[BandHeaders]",
+    nodata: int = -1,
+) -> pd.DataFrame:
     """
-    An xarray backend to open a single TSG spectral dataset.
+    Map scalar values to classes, where appropriate.
     """
-
-    description = "Load TSG spectral datasets using xarray"
-
-    def open_dataset(
-        self,
-        filename_or_obj,
-        header_format="20s2I8h4I2h",
-        tray_info_format: str = "3f2i",
-        section_info_format: str = "4f3i",
-        drop_variables=None,
-        lock=None,
-    ) -> xarray.Dataset:
-        self.lock = lock or get_lock()
-        fpath = Path(filename_or_obj)
-        hdr, bip = None, None
-        bip = fpath if fpath.suffix == ".bip" else fpath.with_suffix(".bip")
-        tsg = fpath if fpath.suffix == ".tsg" else fpath.with_suffix(".tsg")
-        hdr = next(fpath.parent.glob("*tsg.hdr"))
-        if not bip.exists() and tsg.exists() and hdr.exists():
-            raise FileNotFoundError(
-                f"Missing file: {','.join(([bip.name] if not bip.exists() else []) + ([tsg.name] if not tsg.exists() else []) + ([hdr.name] if not hdr.exists() else []))}"
+    df = pd.DataFrame(
+        {
+            band.name: (
+                np.where(
+                    np.isclose(scalars[:, band.band], np.finfo("float32").min),
+                    -1,
+                    scalars[:, band.band],
+                )
             )
+            for band in bandheaders
+        }
+    )
 
-        spectra = read_tsg_bip_pair(tsg, bip, "a")
-        return spectral_dataset_to_xarray(spectra)
-
-    def guess_can_open(self, filename_or_obj: str | Path) -> bool:
-
-        fpath = Path(filename_or_obj)
-        return ((fpath.suffix == ".bip") and ("tsg" in fpath.stem)) or (
-            (fpath.suffix == ".tsg") and ("tsg" in fpath.stem)
-        )
+    for band in bandheaders:
+        if (band.flag == 2) & (band.class_number > -1):
+            df[band.name] = pd.Series(df[band.name].astype(np.int16)).map(
+                classes[int(band.class_number)].classes
+            )
+    return df
 
 
 class BIPBackendArray(xarray.backends.BackendArray):
@@ -95,13 +88,12 @@ class BIPBackendArray(xarray.backends.BackendArray):
             chunks = {}
 
         fpath = Path(filename_or_obj)
-        self.tsg, self.bip, self.hdr = None, None, None
+        self.tsg, self.bip = None, None
         self.bip = fpath if fpath.suffix == ".bip" else fpath.with_suffix(".bip")
         self.tsg = fpath if fpath.suffix == ".tsg" else fpath.with_suffix(".tsg")
-        self.hdr = next(fpath.parent.glob("*tsg.hdr"))
-        if not self.bip.exists() and self.tsg.exists() and self.hdr.exists():
+        if not self.bip.exists() and self.tsg.exists():
             raise FileNotFoundError(
-                f"Missing file: {','.join(([self.bip.name] if not self.bip.exists() else []) + ([self.tsg.name] if not self.tsg.exists() else []) + ([self.hdr.name] if not self.hdr.exists() else []))}"
+                f"Missing file: {','.join(([self.bip.name] if not self.bip.exists() else []) + ([self.tsg.name] if not self.tsg.exists() else []))}"
             )
         self.fstr = _read_tsg_file(self.tsg)
         self.headers = _find_header_sections(self.fstr)
@@ -112,6 +104,9 @@ class BIPBackendArray(xarray.backends.BackendArray):
         self.info["coordinates"] = {
             k: int(v) for k, v in self.info["coordinates"].items()
         }
+        self.coords = coords_from_sampleheaders(
+            self.info["sample headers"], self.wavelength
+        )
         self.shape = (
             2,
             self.info["coordinates"]["lastsample"],
@@ -149,13 +144,14 @@ class BIPBackendArray(xarray.backends.BackendArray):
                 dtype=self.dtype,
             ).reshape(2, nsamples, self.info["coordinates"]["lastband"])
 
+        # these need to be integer-indexed
         arr = xarray.DataArray(
             arr,
-            dims=("band", "sample", "wavelength"),
+            dims=("half", "sample", "wavelength"),
             coords={
-                "band": np.arange(2),
-                "sample": np.arange(start, stop),
-                "wavelength": self.wavelength,
+                "half": np.arange(2),
+                "sample": np.arange(start, stop, dtype="uint64"),
+                "wavelength": np.arange(self.wavelength.size),
             },
         )
         if isinstance(key, int):
@@ -163,7 +159,7 @@ class BIPBackendArray(xarray.backends.BackendArray):
         return arr.loc[*key].values
 
 
-class LazyTSGBIPBackend(xarray.backends.BackendEntrypoint):
+class TSGBIPBackend(xarray.backends.BackendEntrypoint):
     """
     A lazy-loading xarray backend to open a single TSG spectral dataset.
     """
@@ -190,24 +186,37 @@ class LazyTSGBIPBackend(xarray.backends.BackendEntrypoint):
         # lazy data array representing the spectral array
         da = xarray.DataArray(
             data=xarray.core.indexing.LazilyIndexedArray(backend_array),
-            dims=("band", "sample", "wavelength"),
+            dims=("half", "sample", "wavelength"),
             coords={
-                "band": np.arange(2),
+                **backend_array.coords,
+                "half": np.arange(2),
                 "sample": np.arange(
-                    0, backend_array.info["coordinates"]["lastsample"], dtype=np.int32
+                    0, backend_array.info["coordinates"]["lastsample"], dtype="uint64"
                 ),
                 "wavelength": backend_array.wavelength,
+                "band": ("wavelength", np.arange(backend_array.wavelength.size)),
             },
         )
+
         product_data = product_dataset_to_xarray(  # products always loads
-            _parse_scalars(
+            parse_scalars(
                 da[1].values,
                 backend_array.info["class"],
                 backend_array.info["band headers"],
             ),
             backend_array.info["class"],
         )
-        return product_data.assign(Spectra=da[0])
+        ds = product_data.assign(Spectra=da[0])
+        # all of the useful information from the band headers, sample headers,
+        # class headers is incorporated already
+        ds.attrs.update(
+            {
+                k: v
+                for k, v in backend_array.info.items()
+                if k not in ["band headers", "class", "sample headers"]
+            }
+        )
+        return ds
 
     def guess_can_open(self, filename_or_obj: str | Path) -> bool:
         fpath = Path(filename_or_obj)
@@ -227,8 +236,6 @@ class CRASBackend(xarray.backends.BackendEntrypoint):
         self,
         filename_or_obj,
         header_format="20s2I8h4I2h",
-        tray_info_format: str = "3f2i",
-        section_info_format: str = "4f3i",
         drop_variables=None,
         lock=None,
     ) -> xarray.Dataset:
@@ -243,15 +250,15 @@ class CRASBackend(xarray.backends.BackendEntrypoint):
                 file.read(4 * (self.header.nchunks + 1)),
             ).astype(np.uint64)  # deal with +4gb cras files by using uint64
 
-            diff_offset = np.diff(self.offsets, prepend=1).astype(np.uint64)
+            diff_offset = np.diff(self.offsets, prepend=1)  # this needs to be signed
             overflow_finder = np.where(diff_offset < -1)[0].astype(np.uint64)
-            if len(overflow_finder) > 1:
+            if overflow_finder.size > 1:
                 raise IndexError("Chunk offset array wraps around more than once")
 
-            if len(overflow_finder) > 0:
+            if overflow_finder.size:
                 # add np.int32 max to the offset array this should be ok, unless there is a case where there is more than 1 overflow,
                 # in which case I expect the cras reading component to crash
-                self.offsets[overflow_finder[0] :] += np.int64(
+                self.offsets[overflow_finder[0] :] += np.uint64(
                     np.iinfo(np.uint32).max + 1
                 )
 
@@ -286,17 +293,35 @@ class CRASBackend(xarray.backends.BackendEntrypoint):
             ).astype(np.uint64)
             file.seek(info_table_start)
 
-            self.tray: list[TrayInfo] = []
-            for i in range(self.header.ntrays):
-                bytes = file.read(20)
-                self.tray.append(TrayInfo(*struct.unpack(tray_info_format, bytes)))
-
-            self.section: list[SectionInfo] = []
-            for i in range(self.header.nsections):
-                bytes = file.read(28)
-                self.section.append(
-                    SectionInfo(*struct.unpack(section_info_format, bytes))
+            self.tray = np.rec.array(
+                np.fromfile(
+                    file,
+                    dtype=[
+                        ("utlengthmm", "f4"),
+                        ("baseheightmm", "f4"),
+                        ("coreheightmm", "f4"),
+                        ("nsections", "u4"),
+                        ("nlines", "u4"),
+                    ],
+                    count=self.header.ntrays,
                 )
+            )
+
+            self.section = np.rec.array(
+                np.fromfile(
+                    file,
+                    dtype=[
+                        ("utlengthmm", "f4"),
+                        ("startmm", "f4"),
+                        ("endmm", "f4"),
+                        ("trimwidthmm", "f4"),
+                        ("startcol", "u4"),
+                        ("endcol", "u4"),
+                        ("nlines", "u4"),
+                    ],
+                    count=self.header.nsections,
+                )
+            )
 
         da = xarray.DataArray(
             data=cras,
@@ -306,8 +331,8 @@ class CRASBackend(xarray.backends.BackendEntrypoint):
                     "x",
                     np.hstack(
                         [
-                            np.ones(s.nlines, dtype="int32") * ix
-                            for ix, s in enumerate(self.section)
+                            np.ones(n, dtype="uint16") * ix
+                            for ix, n in enumerate(self.tray.nlines)
                         ]
                     ),
                 ),
@@ -315,8 +340,8 @@ class CRASBackend(xarray.backends.BackendEntrypoint):
                     "x",
                     np.hstack(
                         [
-                            np.ones(s.nlines, dtype="int32") * ix
-                            for ix, s in enumerate(self.tray)
+                            np.ones(n, dtype="uint16") * ix
+                            for ix, n in enumerate(self.section.nlines)
                         ]
                     ),
                 ),
@@ -341,8 +366,6 @@ class CRASBackendArray(xarray.backends.BackendArray):
         lock=None,
         chunks=None,
         header_format: str = "20s2I8h4I2h",
-        tray_info_format: str = "3f2i",
-        section_info_format: str = "4f3i",
     ):
         self.filename_or_obj = filename_or_obj
         self.lock = lock
@@ -357,17 +380,18 @@ class CRASBackendArray(xarray.backends.BackendArray):
                 file.read(4 * (self.header.nchunks + 1)),
             ).astype(np.uint64)  # deal with +4gb cras files by using uint64
 
-            diff_offset = np.diff(self.offsets, prepend=1).astype(np.uint64)
+            diff_offset = np.diff(self.offsets, prepend=1)  # this needs to be signed
             overflow_finder = np.where(diff_offset < -1)[0].astype(np.uint64)
-            if len(overflow_finder) > 1:
+            if overflow_finder.size > 1:
                 raise IndexError("Chunk offset array wraps around more than once")
 
-            if len(overflow_finder) > 0:
+            if overflow_finder.size:
                 # add np.int32 max to the offset array this should be ok, unless there is a case where there is more than 1 overflow,
                 # in which case I expect the cras reading component to crash
-                self.offsets[overflow_finder[0] :] += np.int64(
+                self.offsets[overflow_finder[0] :] += np.uint64(
                     np.iinfo(np.uint32).max + 1
                 )
+
             info_table_start = (
                 64
                 + (self.header.nchunks + 1) * 4
@@ -376,17 +400,35 @@ class CRASBackendArray(xarray.backends.BackendArray):
             ).astype(np.uint64)
             file.seek(info_table_start)
 
-            self.tray: list[TrayInfo] = []
-            for i in range(self.header.ntrays):
-                bytes = file.read(20)
-                self.tray.append(TrayInfo(*struct.unpack(tray_info_format, bytes)))
-
-            self.section: list[SectionInfo] = []
-            for i in range(self.header.nsections):
-                bytes = file.read(28)
-                self.section.append(
-                    SectionInfo(*struct.unpack(section_info_format, bytes))
+            self.tray = np.rec.array(
+                np.fromfile(
+                    file,
+                    dtype=[
+                        ("utlengthmm", "f4"),
+                        ("baseheightmm", "f4"),
+                        ("coreheightmm", "f4"),
+                        ("nsections", "u4"),
+                        ("nlines", "u4"),
+                    ],
+                    count=self.header.ntrays,
                 )
+            )
+
+            self.section = np.rec.array(
+                np.fromfile(
+                    file,
+                    dtype=[
+                        ("utlengthmm", "f4"),
+                        ("startmm", "f4"),
+                        ("endmm", "f4"),
+                        ("trimwidthmm", "f4"),
+                        ("startcol", "u4"),
+                        ("endcol", "u4"),
+                        ("nlines", "u4"),
+                    ],
+                    count=self.header.nsections,
+                )
+            )
 
         self.shape = (self.header.nl, self.header.ns, self.header.nb)
         self.imgshape = (self.header.chunksize, self.header.ns, self.header.nb)
@@ -436,7 +478,8 @@ class CRASBackendArray(xarray.backends.BackendArray):
             arr,
             dims=("x", "y", "channel"),
             coords={
-                "x": np.arange(arr.shape[0]) + self.header.chunksize * chunkidx_start,
+                "x": np.arange(arr.shape[0], dtype="uint64")
+                + self.header.chunksize * chunkidx_start,
             },
         )
         if isinstance(key, int):
@@ -473,8 +516,8 @@ class LazyCRASBackend(xarray.backends.BackendEntrypoint):
                     "x",
                     np.hstack(
                         [
-                            np.ones(s.nlines, dtype="int32") * ix
-                            for ix, s in enumerate(backend_array.section)
+                            np.ones(n, dtype="uint16") * ix
+                            for ix, n in enumerate(backend_array.tray.nlines)
                         ]
                     ),
                 ),
@@ -482,8 +525,8 @@ class LazyCRASBackend(xarray.backends.BackendEntrypoint):
                     "x",
                     np.hstack(
                         [
-                            np.ones(s.nlines, dtype="int32") * ix
-                            for ix, s in enumerate(backend_array.tray)
+                            np.ones(n, dtype="uint16") * ix
+                            for ix, n in enumerate(backend_array.section.nlines)
                         ]
                     ),
                 ),

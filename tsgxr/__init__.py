@@ -1,9 +1,13 @@
 from pathlib import Path
 
 from ._version import __version__
-from .read import load_tsg
+from .read import open_tsg
+from .util import Handle
 
-__all__ = ["__version__", "find_TSG_datasets", "load_tsg"]
+logger = Handle(__name__)
+
+
+__all__ = ["__version__", "find_TSG_datasets", "open_tsg"]
 
 
 def find_TSG_datasets(parent_directory: Path | str) -> dict:

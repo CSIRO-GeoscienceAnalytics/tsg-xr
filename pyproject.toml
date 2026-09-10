@@ -19,7 +19,8 @@ dependencies = [
   "xarray>=2025",
   "zarr",
   "pandas",
-  "pytsg>=0.2.8",
+  "matplotlib",
+  "pytsg @ git+https://github.com/Geological-Survey-of-Western-Australia/pytsg.git",
   "typer",
   "joblib",
   "dask"
@@ -42,11 +43,9 @@ tsgxr = "tsgxr.cli:app"
 lazycras = "tsgxr.xarray_plugin:LazyCRASBackend"
 cras = "tsgxr.xarray_plugin:CRASBackend"
 tsg = "tsgxr.xarray_plugin:TSGBIPBackend"
-lazytsg = "tsgxr.xarray_plugin:LazyTSGBIPBackend"
 
 [project.optional-dependencies]
-plot = ["matplotlib"]
-notebook = ["matplotlib", 'ipykernel']
+notebook = ['ipykernel']
 docs = [
   "sphinx_rtd_theme",
   "docutils",
