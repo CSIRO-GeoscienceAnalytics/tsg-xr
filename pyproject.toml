@@ -20,7 +20,7 @@ dependencies = [
   "zarr",
   "pandas",
   "matplotlib",
-  "pytsg>=0.2.8",
+  "pytsg>=0.5",
   "typer",
   "joblib",
   "dask"

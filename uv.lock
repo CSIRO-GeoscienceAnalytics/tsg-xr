@@ -846,7 +846,7 @@ name = "importlib-metadata"
 version = "9.0.1"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "zipp", marker = "python_full_version < '3.12'" },
+    { name = "zipp" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/6f/7e/1e7e8dc30634b93ebb3d58a3dea569ad146e656218d3960ab04f62047b29/importlib_metadata-9.0.1.tar.gz", hash = "sha256:ab830580bc0ef3db61ce8fae716389e5462b67e033018bab6d8f80ef17172f99", size = 59124, upload-time = "2026-08-28T15:30:34.646Z" }
 wheels = [
@@ -1855,11 +1855,11 @@ wheels = [
 
 [[package]]
 name = "platformdirs"
-version = "4.11.7"
+version = "4.11.8"
 source = { registry = "https://pypi.org/simple" }
-sdist = { url = "https://files.pythonhosted.org/packages/69/b7/802a56eca9f2fac455b8bab5375a2647b0f0e14a2cd63ef077de3c4a7658/platformdirs-4.11.7.tar.gz", hash = "sha256:4f41487eeeeeb07f3a6625e61d9bc0ae6809f92d3386dbd74392fbb76108104d", size = 35127, upload-time = "2026-09-01T13:35:10.502Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/53/18/f3bb8ef0d3b930692343da8aa4d3cbcd6749477c053959395ac81965a6e9/platformdirs-4.11.8.tar.gz", hash = "sha256:f23abafea7dd4276d1f29104b83598d7dcc567cafd07c9c951e66665645437fc", size = 37182, upload-time = "2026-09-08T22:20:42.866Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/27/6e/80993e10a0482f630cef528635789233224f36b1ffd11592aa15d13ff9ce/platformdirs-4.11.7-py3-none-any.whl", hash = "sha256:8a02cb259042c79d1cd0450facc2fe6dc9d303ae7901afbe33bf8ea0b188cef6", size = 23938, upload-time = "2026-09-01T13:35:09.02Z" },
+    { url = "https://files.pythonhosted.org/packages/f4/e1/5b7b8bbb55084d1425bcb9bc823ff519e1b2be05f6ebb0089e2eacc38413/platformdirs-4.11.8-py3-none-any.whl", hash = "sha256:52f2f181bbfde907966932cc8312d967d02976422d66d537ea16092b8e291081", size = 24027, upload-time = "2026-09-08T22:20:41.537Z" },
 ]
 
 [[package]]
@@ -2010,7 +2010,7 @@ wheels = [
 [[package]]
 name = "pytsg"
 version = "0.5.0"
-source = { git = "https://github.com/Geological-Survey-of-Western-Australia/pytsg.git#8c5fb3219757c51db5c6dec5a0da3a6dbe402fb7" }
+source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "dhcomp" },
     { name = "numpy", version = "2.4.6", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.12'" },
@@ -2019,6 +2019,10 @@ dependencies = [
     { name = "scipy", version = "1.17.1", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.12'" },
     { name = "scipy", version = "1.18.1", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.12'" },
     { name = "simplejpeg" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/8d/a2/82530310748d2c8c91513f2799e97ac15de0e0e257c38aac411ddd436dd6/pytsg-0.5.0.tar.gz", hash = "sha256:0814539f685ca3a437a3a9b2db674dd58dd307c8f8e2accd87593215c46e3bb7", size = 18242, upload-time = "2025-10-18T06:37:47.026Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/87/39/27fe46b75dd0025a66ae6e1b6ee72a8ef997a1093d33ed161ff0289f4c42/pytsg-0.5.0-py3-none-any.whl", hash = "sha256:ad176eff9bb2d085aedc7d886ae80e21e600aaa530b1799d31e33f64b2d9b25d", size = 16766, upload-time = "2025-10-18T06:37:45.87Z" },
 ]
 
 [[package]]
@@ -2926,7 +2930,7 @@ requires-dist = [
     { name = "pandas" },
     { name = "pytest", marker = "extra == 'test'" },
     { name = "pytest-cov", marker = "extra == 'test'" },
-    { name = "pytsg", git = "https://github.com/Geological-Survey-of-Western-Australia/pytsg.git" },
+    { name = "pytsg", specifier = ">=0.5" },
     { name = "ruff", marker = "extra == 'dev'" },
     { name = "sphinx", marker = "extra == 'docs'", specifier = ">=4" },
     { name = "sphinx-autodoc-annotation", marker = "extra == 'docs'" },
