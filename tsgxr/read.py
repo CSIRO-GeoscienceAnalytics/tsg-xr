@@ -457,7 +457,6 @@ def open_tsg(
                         else {k: v for k, v in chunks.items() if k in D[k].dims}
                     )
 
-    DT = xarray.DataTree.from_dict(D)
     if image:
         crasfile = list(directory.glob("*cras.bip*"))
         if crasfile:
@@ -531,5 +530,5 @@ def open_tsg(
                     if isinstance(chunks, int)
                     else {k: v for k, v in chunks.items() if k in image_ds.dims}
                 )
-            DT["Image"] = image_ds
-    return DT
+            D["Image"] = image_ds
+    return xarray.DataTree.from_dict(D)
