@@ -20,7 +20,7 @@ dependencies = [
   "zarr",
   "pandas",
   "matplotlib",
-  "pytsg @ git+https://github.com/Geological-Survey-of-Western-Australia/pytsg.git",
+  "pytsg>=0.2.8",
   "typer",
   "joblib",
   "dask"
