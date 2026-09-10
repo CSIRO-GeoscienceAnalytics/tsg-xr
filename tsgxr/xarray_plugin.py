@@ -144,13 +144,14 @@ class BIPBackendArray(xarray.backends.BackendArray):
                 dtype=self.dtype,
             ).reshape(2, nsamples, self.info["coordinates"]["lastband"])
 
+        # these need to be integer-indexed
         arr = xarray.DataArray(
             arr,
             dims=("half", "sample", "wavelength"),
             coords={
                 "half": np.arange(2),
                 "sample": np.arange(start, stop, dtype="uint64"),
-                "wavelength": self.wavelength,
+                "wavelength": np.arange(self.wavelength.size),
             },
         )
         if isinstance(key, int):
@@ -185,14 +186,15 @@ class TSGBIPBackend(xarray.backends.BackendEntrypoint):
         # lazy data array representing the spectral array
         da = xarray.DataArray(
             data=xarray.core.indexing.LazilyIndexedArray(backend_array),
-            dims=("half", "sample", "band"),
+            dims=("half", "sample", "wavelength"),
             coords={
                 **backend_array.coords,
                 "half": np.arange(2),
                 "sample": np.arange(
                     0, backend_array.info["coordinates"]["lastsample"], dtype="uint64"
                 ),
-                "wavelength": ("band", backend_array.wavelength),
+                "wavelength": backend_array.wavelength,
+                "band": ("wavelength", np.arange(backend_array.wavelength.size)),
             },
         )
 
