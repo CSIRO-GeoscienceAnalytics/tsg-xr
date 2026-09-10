@@ -7,6 +7,7 @@ import pandas as pd
 import pytsg.parse_tsg
 import xarray
 
+from .products import bgrint_to_rgb
 from .util import Handle
 
 logger = Handle(__name__)
@@ -198,8 +199,28 @@ def product_dataset_to_xarray(scalars: pd.DataFrame, classes: dict) -> xarray.Da
     products = scalar_data.set_index(
         pd.Series(scalar_data.index.values, name="sample")
     ).to_xarray()
+    products.attrs.update(  # the indexes are recoverable where desired; dropped here
+        {ch.name: [v for i, v in ch.classes.items()] for ID, ch in classes.items()}
+    )
+    # add colors where they exist
     products.attrs.update(
-        {ch.name: [(i, v) for i, v in ch.classes.items()] for ID, ch in classes.items()}
+        {
+            ch.name + "_Colors": dict(
+                zip(
+                    (v for i, v in ch.classes.items()),
+                    [
+                        f"#{r:02x}{b:02x}{g:02x}"
+                        for (r, g, b) in (
+                            bgrint_to_rgb(np.array(ch.colors, dtype="int")) * 255
+                        )
+                        .round(0)
+                        .astype(int)
+                    ],
+                )
+            )
+            for ID, ch in classes.items()
+            if (getattr(ch, "colors", None) is not None)
+        }
     )
     for grp in ["Centre", "Depth", "Width"]:
         arr = (

@@ -205,7 +205,15 @@ class TSGBIPBackend(xarray.backends.BackendEntrypoint):
             backend_array.info["class"],
         )
         ds = product_data.assign(Spectra=da[0])
-        ds.attrs.update(backend_array.info)
+        # all of the useful information from the band headers, sample headers,
+        # class headers is incorporated already
+        ds.attrs.update(
+            {
+                k: v
+                for k, v in backend_array.info.items()
+                if k not in ["band headers", "class", "sample headers"]
+            }
+        )
         return ds
 
     def guess_can_open(self, filename_or_obj: str | Path) -> bool:

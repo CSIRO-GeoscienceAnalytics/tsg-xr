@@ -30,7 +30,8 @@ def _product_summary_table(
     pandas.DataFrame
         Dataframe with minerals or groups as columns.
     """
-    grps = {
+    level = "Grp" if level.upper().startswith("G") else "Min"
+    grps = {  # get the groups which correspond to 'which' and 'level'
         ix + 1: v
         for ix, v in enumerate(
             [
@@ -53,7 +54,22 @@ def _product_summary_table(
     df = (sum([_get_wideform(ix, g) for ix, g in grps.items()])).set_index(
         ds.depth.values if "depth" in ds.indexes else ds.sample.values
     )
-    df.name = "sTSA{which}"
+    class_key = next(
+        iter(
+            [
+                k
+                for k in ds.attrs
+                if k.upper().startswith(f"{which[0]}_{which[1:]}".upper())
+                and k.upper().endswith(
+                    f"{'Groups' if level.upper().startswith('G') else 'Minerals'}".upper()
+                )
+            ]
+        )
+    )
+    df = df[
+        [c for c in ds.attrs[class_key] if (c in df.columns)]
+    ]  # sort order of columns
+    df.name = f"sTSA{which}{'Groups' if level == 'Grp' else 'Minerals'}"
     df.columns.name = None
     df.columns.name = next(iter(ds.dims))
     return df.where(df > 0).dropna(how="all", axis=1)
@@ -99,35 +115,37 @@ def products_to_mineral_table(ds: xarray.Dataset, which: str = "sTSAS") -> pd.Da
     return _product_summary_table(ds, which, level="Min")
 
 
-def bgrint_to_rgb(v: int):
+def bgrint_to_rgb(v: int | np.ndarray):
     # fractional RGB from bgr integer
     # https://github.com/AuScope/nvcl_kit/blob/2ab72a9c2133715a1ffc75af282e2824b2681bca/nvcl_kit/reader.py#L62-L68
-    return ((v & 255) / 255.0, ((v & 65280) >> 8) / 255.0, (v >> 16) / 255.0)
+    if isinstance(v, int):
+        return ((v & 255) / 255.0, ((v & 65280) >> 8) / 255.0, (v >> 16) / 255.0)
+    else:
+        return np.vstack(
+            [(v & 255) / 255.0, ((v & 65280) >> 8) / 255.0, (v >> 16) / 255.0]
+        ).T
 
 
-def get_product_colormap(ds: xarray.Dataset, which: str = "sTSAS"):
-    pcls = next(
+def get_product_colormap(ds: xarray.Dataset, which: str = "sTSAS", level="Grp"):
+    return next(
         iter(
             [
                 v
-                for ix, v in ds.attrs["class"].items()
+                for k, v in ds.attrs.items()
                 # these seem to be _ delimited
-                if f"{which[0]}_{which[1:]}".upper() in v.name.upper()
+                if k.upper().startswith(f"{which[0]}_{which[1:]}".upper())
+                and k.upper().endswith(
+                    f"{'Groups' if level.upper().startswith('G') else 'Minerals'}_Colors".upper()
+                )
             ]
         )
     )
-    return {
-        c: bgrint_to_rgb(color)
-        for c, color in zip(
-            pcls.classes.values(),
-            pcls.colors,
-        )
-    }
 
 
 def plot_product_downhole(
     ds: xarray.Dataset,
     which: str,
+    level: str = "Grp",
     step: float | None = None,
     ax: matplotlib.axes.Axes | None = None,
     invert: bool = True,
@@ -142,6 +160,8 @@ def plot_product_downhole(
         as an index here will be used in the downhole dimension.
     which : str
         Which product set to plot (e.g. 'sjCLST').
+    level : str
+        Whether to summarize at 'Grp' or 'Min' level.
     step : float
         Step to use for compositing, if any. In metres where the
         dataset supplied is indexed by depth (any step > 0.02 makes sense),
@@ -156,8 +176,8 @@ def plot_product_downhole(
     -------
     matplotlib.axes.Axes
     """
-    products = products_to_mineral_table(ds, which=which)
-    colormap = get_product_colormap(ds, which=which)
+    products = _product_summary_table(ds, which=which, level=level)
+    colormap = get_product_colormap(ds, which=which, level=level)
     if step is not None:
         nsteps = (products.index.values[-1] - products.index.values[0]) // step + 1
         products = products.groupby(
