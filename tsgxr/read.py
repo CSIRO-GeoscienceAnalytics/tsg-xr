@@ -411,11 +411,7 @@ def open_tsg(
         ds = xarray.open_dataset(f, engine="tsg").drop_vars("half")
         if not lazy:
             ds = ds.load()
-        D = {
-            **D,
-            f"{sset}/Spectra": ds[["Spectra"]],
-            f"{sset}/Products": ds.drop_vars("Spectra"),
-        }
+        D = {**D, f"{sset}": ds}
     lidar = next(directory.glob("*tsg_hires.dat*"))
     if lidar:
         prof_da = xarray.DataArray(  # TODO: lazy loader?
