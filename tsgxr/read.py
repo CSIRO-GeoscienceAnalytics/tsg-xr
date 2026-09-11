@@ -435,16 +435,7 @@ def open_tsg(
 
     if index_coord == "depth":  # TODO: rechunk?
         for k in D:
-            if "Products" in k:
-                D[k] = _reindex_depth(D[k], template=D[f"{k.split('/')[0]}/Spectra"])
-                if chunks:
-                    D[k] = D[k].chunk(
-                        chunks
-                        if isinstance(chunks, int)
-                        else {k: v for k, v in chunks.items() if k in D[k].dims}
-                    )
-        for k in D:
-            if "Spectra" in k:
+            if "Spectra" in D[k].data_vars:
                 D[k] = _reindex_depth(D[k])
                 if chunks:
                     D[k] = D[k].chunk(
