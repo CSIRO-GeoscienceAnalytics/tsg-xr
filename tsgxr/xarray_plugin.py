@@ -206,7 +206,10 @@ class TSGBIPBackend(xarray.backends.BackendEntrypoint):
             ),
             backend_array.info["class"],
         )
-        ds = product_data.assign(Spectra=da[0])
+        # handle nodata in spectra here # TODO: can we pull this from the mask?
+        ds = product_data.assign(
+            Spectra=da[0].where(lambda x: ~np.isclose(x, np.finfo(np.float32).min))
+        )
         # all of the useful information from the band headers, sample headers,
         # class headers is incorporated already
         ds.attrs.update(
