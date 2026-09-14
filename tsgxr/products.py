@@ -9,6 +9,13 @@ from .util import Handle
 logger = Handle(__name__)
 
 
+def get_available_systems(ds):
+    """
+    Get the names of available systems
+    """
+    return {v.split(" ")[1] for v in ds.data_vars if "Grp1" in v or "Min1" in v}
+
+
 def get_system_subset_attrs(ds, which, level=None):
     items = [
         k
