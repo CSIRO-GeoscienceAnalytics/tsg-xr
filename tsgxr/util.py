@@ -1,6 +1,8 @@
 import logging
 from pathlib import Path
 
+import numpy as np
+
 
 def rm_tree(pth: Path):
     """Recursively remove a folder."""
@@ -71,3 +73,14 @@ def Handle(
     if level is not None:
         logger.setLevel(getattr(logging, level))
     return logger
+
+
+def bgrint_to_rgb(v: int | np.ndarray):
+    # fractional RGB from bgr integer
+    # https://github.com/AuScope/nvcl_kit/blob/2ab72a9c2133715a1ffc75af282e2824b2681bca/nvcl_kit/reader.py#L62-L68
+    if isinstance(v, int):
+        return ((v & 255) / 255.0, ((v & 65280) >> 8) / 255.0, (v >> 16) / 255.0)
+    else:
+        return np.vstack(
+            [(v & 255) / 255.0, ((v & 65280) >> 8) / 255.0, (v >> 16) / 255.0]
+        ).T

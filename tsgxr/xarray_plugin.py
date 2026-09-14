@@ -15,7 +15,7 @@ from pytsg.parse_tsg import (
 from simplejpeg import decode_jpeg
 
 from .read import coords_from_sampleheaders, product_dataset_to_xarray
-from .util import Handle
+from .util import Handle, bgrint_to_rgb
 
 logger = Handle(__name__)
 

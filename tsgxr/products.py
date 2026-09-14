@@ -138,17 +138,6 @@ def products_to_mineral_table(ds: xarray.Dataset, which: str = "sTSAS") -> pd.Da
     return _product_summary_table(ds, which, level="Min")
 
 
-def bgrint_to_rgb(v: int | np.ndarray):
-    # fractional RGB from bgr integer
-    # https://github.com/AuScope/nvcl_kit/blob/2ab72a9c2133715a1ffc75af282e2824b2681bca/nvcl_kit/reader.py#L62-L68
-    if isinstance(v, int):
-        return ((v & 255) / 255.0, ((v & 65280) >> 8) / 255.0, (v >> 16) / 255.0)
-    else:
-        return np.vstack(
-            [(v & 255) / 255.0, ((v & 65280) >> 8) / 255.0, (v >> 16) / 255.0]
-        ).T
-
-
 def get_product_colormap(ds: xarray.Dataset, which: str = "sTSAS", level="Grp"):
     return ds.attrs[
         next(

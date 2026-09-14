@@ -1,4 +1,3 @@
-import inspect
 import re
 from pathlib import Path
 
@@ -7,12 +6,20 @@ import pandas as pd
 import pytsg.parse_tsg
 import xarray
 
-from .products import bgrint_to_rgb
 from .util import Handle
 
 logger = Handle(__name__)
 
 SPECTRAL_MAPPING = {"tsg": "NIR", "tir": "TIR", "mir": "MIR"}
+
+HEADER_DTYPES = {
+    "depth": np.float32,
+    "tray": np.uint16,
+    "sample": np.uint32,
+    "section": np.uint8,
+    "section-position": np.float32,
+    "section-part": np.uint8,
+}
 
 
 def interpolate_section_depths(
