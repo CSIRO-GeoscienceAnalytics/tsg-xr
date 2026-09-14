@@ -427,7 +427,7 @@ class CRASBackend(xarray.backends.BackendEntrypoint):
             data=cras,
             dims=("x", "y", "channel"),
             coords={
-                "section": (
+                "tray": (
                     "x",
                     np.hstack(
                         [
@@ -436,7 +436,7 @@ class CRASBackend(xarray.backends.BackendEntrypoint):
                         ]
                     ),
                 ),
-                "tray": (
+                "section": (
                     "x",
                     np.hstack(
                         [
