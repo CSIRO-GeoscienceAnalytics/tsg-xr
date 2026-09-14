@@ -250,18 +250,18 @@ class BIPBackendArray(xarray.backends.BackendArray):
         #         "wavelength": np.arange(self.wavelength.size),
         #     },
         # )
-        _key = tuple(key)  # copy key
         if start != 0:
+            key = list(key)  # copy key
             if isinstance(key1, slice):
-                _key[1] = slice(
+                key[1] = slice(
                     key1.start - start if key1.start else key1.start,
                     key1.stop - start if key1.stop else key1.stop,
                     key1.step,
                 )
             elif isinstance(key1, int):
-                _key[1] = key1 - start
+                key[1] = key1 - start
 
-        return arr[*_key]
+        return arr[*key]
 
 
 class TSGBIPBackend(xarray.backends.BackendEntrypoint):
@@ -593,10 +593,10 @@ class CRASBackendArray(xarray.backends.BackendArray):
         # )
         # if isinstance(key, int):
         #     arr = arr.squeeze()
-        _key = tuple(key)  # copy key
         if start != 0:
+            key = list(key)  # copy key
             if isinstance(key0, slice):
-                _key[1] = slice(
+                key[0] = slice(
                     key0.start - (self.header.chunksize * chunkidx_start)
                     if key0.start
                     else key0.start,
@@ -604,8 +604,8 @@ class CRASBackendArray(xarray.backends.BackendArray):
                     key0.step,
                 )
             elif isinstance(key0, int):
-                _key[1] = key0 - (self.header.chunksize * chunkidx_start)
-
+                key[0] = key0 - (self.header.chunksize * chunkidx_start)
+            key = tuple(key)
         return arr[*key]
 
 
