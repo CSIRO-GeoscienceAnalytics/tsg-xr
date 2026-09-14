@@ -14,10 +14,19 @@ from pytsg.parse_tsg import (
 )
 from simplejpeg import decode_jpeg
 
-from .read import coords_from_sampleheaders, product_dataset_to_xarray
+from .read import product_dataset_to_xarray
 from .util import Handle, bgrint_to_rgb
 
 logger = Handle(__name__)
+
+HEADER_DTYPES = {
+    "depth": np.float32,
+    "tray": np.uint16,
+    "sample": np.uint32,
+    "section": np.uint8,
+    "section-position": np.float32,
+    "section-part": np.uint8,
+}
 
 
 try:
@@ -43,32 +52,119 @@ except ImportError:
 
 def parse_scalars(
     scalars: np.ndarray,
-    classes: "list[ClassHeaders]",
-    bandheaders: "list[BandHeaders]",
-    nodata: int = -1,
+    classes: "list[pytsg.parse_tsg.ClassHeaders]",
+    bandheaders: "list[pytsg.parse_tsg.BandHeaders]",
+    nodata: float | None = None,
+    map_class_names: bool = True,
 ) -> pd.DataFrame:
     """
     Map scalar values to classes, where appropriate.
+
+    Parameters
+    ----------
+    scalars : numpy.ndarray
+        Scalar data to parse/format.
+    classes : list [ pytsg.parse_tsg.ClassHeaders]
+        List of class headers for the scalar data.
+    bandheaders : list [ pytsg.parse_tsg.ClassHeaders]
+        List of band headers for the scalar data.
+    nodata: int
+        Nodata value to use, replacing `np.finfo("float32").min`.
+    map_class_names : bool
+        Whether to remap class data to the class names,
+        or otherwise retain the integers.
+
+    Returns
+    -------
+    pandas.DataFrame
+        Dataframe of scalar data.
     """
-    df = pd.DataFrame(
+    _nodata = (
+        -1 if nodata is None else nodata
+    )  # using -1 initiall is needed to infer integers, and map classes where deisred
+
+    scalars = np.where(np.isclose(scalars, np.finfo("float32").min), _nodata, scalars)
+    df = pd.DataFrame({band.name: scalars[:, band.band] for band in bandheaders})
+    # TODO: infer objects, fill integers with e.g. -1?
+    if map_class_names:
+        for band in bandheaders:
+            if (band.flag == 2) & (band.class_number > -1):
+                df[band.name] = pd.Series(df[band.name].astype(np.int16)).map(
+                    classes[int(band.class_number)].classes
+                )
+    if nodata is None:
+        df = df.replace(_nodata, np.nan)
+    # add attributes directly to the dataframe
+    df.attrs.update(  # the indexes are recoverable where desired; dropped here
+        {ch.name: [v for i, v in ch.classes.items()] for ID, ch in classes.items()}
+    )
+    # add colors where they exist
+    df.attrs.update(
         {
-            band.name: (
-                np.where(
-                    np.isclose(scalars[:, band.band], np.finfo("float32").min),
-                    -1,
-                    scalars[:, band.band],
+            ch.name + "_Colors": dict(
+                zip(
+                    (v for i, v in ch.classes.items()),
+                    [
+                        f"#{r:02x}{b:02x}{g:02x}"
+                        for (r, g, b) in (
+                            bgrint_to_rgb(np.array(ch.colors, dtype="int")) * 255
+                        )
+                        .round(0)
+                        .astype(int)
+                    ],
                 )
             )
-            for band in bandheaders
+            for ID, ch in classes.items()
+            if (getattr(ch, "colors", None) is not None)
         }
     )
-
-    for band in bandheaders:
-        if (band.flag == 2) & (band.class_number > -1):
-            df[band.name] = pd.Series(df[band.name].astype(np.int16)).map(
-                classes[int(band.class_number)].classes
-            )
+    if "Final Mask" in df.columns:
+        df["Final Mask"] = df["Final Mask"].astype(np.uint8)
     return df
+
+
+def coords_from_sampleheaders(headers: pd.DataFrame, wavelengths: np.ndarray) -> dict:
+    """
+    Turn the sample headers of a TSG spectral subset into coordinates.
+
+    Parameters
+    ----------
+    spectraldata  : pytsg.parse_tsg.Spectra
+        Spectral subset loaded with pytsg.
+
+    Returns
+    -------
+    coords : dict
+        Mapping of coordinate names to values, and in the case of non-index coordinates
+        the corresponding index coordinate.
+    """
+
+    sampleheaders = headers.rename(
+        columns={
+            "sample": "sample",
+            "T": "tray",
+            "L": "section",
+            "P": "section-part",
+            "D": "depth",
+            "X": "section-position",
+            "H": "hole",
+        }
+    )
+    # note that depths can be duplicated, so would need to be
+    # post-processed to be used as an index
+    coords = {
+        "sample": sampleheaders["sample"].astype(HEADER_DTYPES["sample"]),
+        "wavelength": wavelengths.astype(np.float32),
+        "band": ("wavelength", np.arange(wavelengths.size)),
+    }
+    coords.update(
+        {
+            c: ("sample", d.astype(HEADER_DTYPES[c]) if c in HEADER_DTYPES else d)
+            for c, d in sampleheaders.items()
+            if c not in ["sample"]
+        }
+    )
+    return coords
 
 
 class BIPBackendArray(xarray.backends.BackendArray):
@@ -145,18 +241,27 @@ class BIPBackendArray(xarray.backends.BackendArray):
             ).reshape(2, nsamples, self.info["coordinates"]["lastband"])
 
         # these need to be integer-indexed
-        arr = xarray.DataArray(
-            arr,
-            dims=("half", "sample", "wavelength"),
-            coords={
-                "half": np.arange(2),
-                "sample": np.arange(start, stop, dtype="uint64"),
-                "wavelength": np.arange(self.wavelength.size),
-            },
-        )
-        if isinstance(key, int):
-            arr = arr.squeeze()
-        return arr.loc[*key].values
+        # arr = xarray.DataArray(
+        #     arr,
+        #     dims=("half", "sample", "wavelength"),
+        #     coords={
+        #         "half": np.arange(2),
+        #         "sample": np.arange(start, stop, dtype="uint32"),
+        #         "wavelength": np.arange(self.wavelength.size),
+        #     },
+        # )
+        _key = tuple(key)  # copy key
+        if start != 0:
+            if isinstance(key1, slice):
+                _key[1] = slice(
+                    key1.start - start if key1.start else key1.start,
+                    key1.stop - start if key1.stop else key1.stop,
+                    key1.step,
+                )
+            elif isinstance(key1, int):
+                _key[1] = key1 - start
+
+        return arr[*_key]
 
 
 class TSGBIPBackend(xarray.backends.BackendEntrypoint):
@@ -175,6 +280,7 @@ class TSGBIPBackend(xarray.backends.BackendEntrypoint):
         drop_variables=None,
         lock=None,
         chunks=None,
+        collapse_products=False,
     ) -> xarray.Dataset:
         if chunks is None:
             chunks = {}
@@ -204,7 +310,7 @@ class TSGBIPBackend(xarray.backends.BackendEntrypoint):
                 backend_array.info["class"],
                 backend_array.info["band headers"],
             ),
-            backend_array.info["class"],
+            collapse_products=collapse_products,
         )
         # handle nodata in spectra here # TODO: can we pull this from the mask?
         ds = product_data.assign(
@@ -477,18 +583,30 @@ class CRASBackendArray(xarray.backends.BackendArray):
         arr = np.vstack(arrays)
         # could modify key to offset the start of key[0] by -(self.header.chunksize * chunkidx_start)
         # this is more verbose but useful for debugging where needed...
-        arr = xarray.DataArray(
-            arr,
-            dims=("x", "y", "channel"),
-            coords={
-                "x": np.arange(arr.shape[0], dtype="uint64")
-                + self.header.chunksize * chunkidx_start,
-            },
-        )
-        if isinstance(key, int):
-            arr = arr.squeeze()
+        # arr = xarray.DataArray(
+        #     arr,
+        #     dims=("x", "y", "channel"),
+        #     coords={
+        #         "x": np.arange(arr.shape[0], dtype="uint64")
+        #         + self.header.chunksize * chunkidx_start,
+        #     },
+        # )
+        # if isinstance(key, int):
+        #     arr = arr.squeeze()
+        _key = tuple(key)  # copy key
+        if start != 0:
+            if isinstance(key0, slice):
+                _key[1] = slice(
+                    key0.start - (self.header.chunksize * chunkidx_start)
+                    if key0.start
+                    else key0.start,
+                    chunkidx_end * self.header.chunksize if key0.stop else key0.stop,
+                    key0.step,
+                )
+            elif isinstance(key0, int):
+                _key[1] = key0 - (self.header.chunksize * chunkidx_start)
 
-        return arr.loc[*key].values
+        return arr[*key]
 
 
 class LazyCRASBackend(xarray.backends.BackendEntrypoint):

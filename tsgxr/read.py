@@ -12,15 +12,6 @@ logger = Handle(__name__)
 
 SPECTRAL_MAPPING = {"tsg": "NIR", "tir": "TIR", "mir": "MIR"}
 
-HEADER_DTYPES = {
-    "depth": np.float32,
-    "tray": np.uint16,
-    "sample": np.uint32,
-    "section": np.uint8,
-    "section-position": np.float32,
-    "section-part": np.uint8,
-}
-
 
 def interpolate_section_depths(
     section_depths: np.ndarray, ninterp: int | np.ndarray
@@ -50,55 +41,6 @@ def interpolate_section_depths(
     return np.hstack(
         [np.linspace(mn, mx, nint) for (nint, (mn, mx)) in zip(ninterp, section_depths)]
     )
-
-
-def coords_from_sampleheaders(headers: pd.DataFrame, wavelengths) -> dict:
-    """
-    Turn the sample headers of a TSG spectral subset into coordinates.
-
-    Parameters
-    ----------
-    spectraldata  : pytsg.parse_tsg.Spectra
-        Spectral subset loaded with pytsg.
-
-    Returns
-    -------
-    coords : dict
-        Mapping of coordinate names to values, and in the case of non-index coordinates
-        the corresponding index coordinate.
-    """
-    sampleheaders = (headers).rename(
-        columns={
-            "sample": "sample",
-            "T": "tray",
-            "L": "section",
-            "P": "section-part",
-            "D": "depth",
-            "X": "section-position",
-            "H": "hole",
-        }
-    )
-    for k in sampleheaders.columns:  # try to convert numeric data
-        try:
-            sampleheaders[k] = sampleheaders[k].apply(pd.to_numeric)
-        except ValueError:
-            pass
-
-    # note that depths can be duplicated, so would need to be
-    # post-processed to be used as an index
-    coords = {
-        "sample": sampleheaders["sample"].values,
-        "wavelength": wavelengths,
-        "band": ("wavelength", np.arange(wavelengths.size)),
-    }
-    coords.update(
-        {
-            c: ("sample", d.values)
-            for c, d in sampleheaders.items()
-            if c not in ["sample"]
-        }
-    )
-    return coords
 
 
 def _reindex_depth(
@@ -187,7 +129,9 @@ def reorder_variables(
     return ds
 
 
-def product_dataset_to_xarray(scalars: pd.DataFrame, classes: dict) -> xarray.Dataset:
+def product_dataset_to_xarray(
+    scalars: pd.DataFrame, collapse_products=False
+) -> xarray.Dataset:
     """
     Transform a set of spectral products/scalars into xarray.align
 
@@ -195,41 +139,24 @@ def product_dataset_to_xarray(scalars: pd.DataFrame, classes: dict) -> xarray.Da
     ----------
     scalars  : pandas.DataFrame
         Dataframe of loaded by pytsg.
-    classes : dict
-        Mapping of classes, to be added as attributes.
+    collapse_products : bool
+        Whether to collapse products to a singular table per system,
+        rather than multiple e.g. Min1, Min2, ..
 
     Returns
     -------
     xarray.Dataset
+
+    Notes
+    -----
+    * Note that group is essentially redundant, could be a coordinate on mineral.
     """
     scalar_data = scalars.copy()  # pd.DataFrame
     # could drop emtpy columns but is unlikely to be many
     products = scalar_data.set_index(
         pd.Series(scalar_data.index.values, name="sample")
     ).to_xarray()
-    products.attrs.update(  # the indexes are recoverable where desired; dropped here
-        {ch.name: [v for i, v in ch.classes.items()] for ID, ch in classes.items()}
-    )
-    # add colors where they exist
-    products.attrs.update(
-        {
-            ch.name + "_Colors": dict(
-                zip(
-                    (v for i, v in ch.classes.items()),
-                    [
-                        f"#{r:02x}{b:02x}{g:02x}"
-                        for (r, g, b) in (
-                            bgrint_to_rgb(np.array(ch.colors, dtype="int")) * 255
-                        )
-                        .round(0)
-                        .astype(int)
-                    ],
-                )
-            )
-            for ID, ch in classes.items()
-            if (getattr(ch, "colors", None) is not None)
-        }
-    )
+    products.attrs.update(scalar_data.attrs)  # propagate attributes
     for grp in ["Centre", "Depth", "Width"]:
         arr = (
             products[[v for v in products.data_vars if re.match(grp + r"\d+", v)]]
