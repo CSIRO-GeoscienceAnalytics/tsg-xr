@@ -9,14 +9,39 @@ from .util import Handle
 logger = Handle(__name__)
 
 
-def get_available_systems(ds):
+def get_available_systems(ds: xarray.Dataset) -> set:
     """
-    Get the names of available systems
+    Query the set of mineral/group classification systems available on a dataset.
+
+    Parameters
+    ----------
+    ds : xarray.Dataset
+        Dataset to query.
+
+    Returns
+    -------
+    set
     """
     return {v.split(" ")[1] for v in ds.data_vars if "Grp1" in v or "Min1" in v}
 
 
-def get_system_subset_attrs(ds, which, level=None):
+def get_system_subset_attrs(ds: xarray.Dataset, which: str, level=None) -> tuple:
+    """
+    Get the names of system-related attributes on a dataset.
+
+    Parameters
+    ----------
+    ds : xarray.Dataset
+        Dataset to get attributes from.
+    which : str
+        Which system to get attributes for.
+    level : str
+        The level to subset attibutes to (either 'Mineral' or 'Groups').
+
+    Returns
+    -------
+    tuple
+    """
     items = [
         k
         for k in ds.attrs
@@ -39,11 +64,13 @@ def get_system_subset_attrs(ds, which, level=None):
             if f"{'Groups' if level.upper().startswith('G') else 'Minerals'}".upper()
             in k.upper()
         ]
-    return items
+    return tuple(items)
 
 
 def _product_summary_table(
-    ds: xarray.Dataset, which: str, level: str = "Grp"
+    ds: xarray.Dataset,
+    which: str,
+    level: str = "Grp",
 ) -> pd.DataFrame:
     """
     Summarize a TSG scalar/product table, aggregating the long-form
@@ -145,7 +172,29 @@ def products_to_mineral_table(ds: xarray.Dataset, which: str = "sTSAS") -> pd.Da
     return _product_summary_table(ds, which, level="Min")
 
 
-def get_product_colormap(ds: xarray.Dataset, which: str = "sTSAS", level="Grp"):
+def get_product_colormap(
+    ds: xarray.Dataset,
+    which: str = "sTSAS",
+    level="Grp",
+) -> dict[str, str]:
+    """
+    Get the product colormap from a dataset for a specific system and level.
+
+    Parameters
+    ----------
+    ds : xarray.Dataset
+        Dataset to get the colormap from.
+    which : str
+        Which system to get the colormap for.
+    level : str
+        Which level to get the colormap for.
+
+    Returns
+    -------
+    dict [ str, str ]
+        Colormap mapping names of minerals/groups to colors (as hex codes,
+        as used in `matplotlib`).
+    """
     return ds.attrs[
         next(
             iter(

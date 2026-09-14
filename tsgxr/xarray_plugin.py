@@ -93,6 +93,7 @@ def parse_scalars(
                     classes[int(band.class_number)].classes
                 )
     if nodata is None:
+        # TODO: fill class names with '' instead of nan?
         df = df.replace(_nodata, np.nan)
     # add attributes directly to the dataframe
     df.attrs.update(  # the indexes are recoverable where desired; dropped here
@@ -102,8 +103,8 @@ def parse_scalars(
     df.attrs.update(
         {
             ch.name + "_Colors": dict(
-                zip(
-                    (v for i, v in ch.classes.items()),
+                zip(  # names here are only valid where map_class_names=True
+                    (v if map_class_names else i for i, v in ch.classes.items()),
                     [
                         f"#{r:02x}{b:02x}{g:02x}"
                         for (r, g, b) in (

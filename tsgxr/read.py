@@ -14,7 +14,8 @@ SPECTRAL_MAPPING = {"tsg": "NIR", "tir": "TIR", "mir": "MIR"}
 
 
 def interpolate_section_depths(
-    section_depths: np.ndarray, ninterp: int | np.ndarray
+    section_depths: np.ndarray,
+    ninterp: int | np.ndarray,
 ) -> np.ndarray:
     """
     Interpolate section depths based on a number of interpolated samples.
@@ -44,9 +45,29 @@ def interpolate_section_depths(
 
 
 def _reindex_depth(
-    da: xarray.DataArray, template: xarray.Dataset | xarray.DataArray | None = None
-) -> xarray.DataArray:
+    da: xarray.DataArray | xarray.Dataset,
+    template: xarray.Dataset | xarray.DataArray | None = None,
+) -> xarray.DataArray | xarray.Dataset:
+    """
+    Reindex a dataset such that it's indexed by depth.
 
+    Parameters
+    ----------
+    da : xarray.DataArray | xarray.Dataset
+        Dataset to reindex.
+    template : xarray.DataArray | xarray.Dataset | None
+        Template to use to get sample-depth indexing information from;
+        where not provided this is expected to be taken from the input `da`.
+
+    Returns
+    -------
+    xarray.DataArray | xarray.Dataset
+        Reindexed dataset.
+
+    Notes
+    -----
+    This is a lossy process where depth is duplicated.
+    """
     # remove samples where the depth is a duplicate, and sort by depth
     # to allow depth as an index
     if template is None:
@@ -130,7 +151,8 @@ def reorder_variables(
 
 
 def product_dataset_to_xarray(
-    scalars: pd.DataFrame, collapse_products=False
+    scalars: pd.DataFrame,
+    collapse_products: bool = False,
 ) -> xarray.Dataset:
     """
     Transform a set of spectral products/scalars into xarray.align
@@ -153,9 +175,8 @@ def product_dataset_to_xarray(
     """
     scalar_data = scalars.copy()  # pd.DataFrame
     # could drop emtpy columns but is unlikely to be many
-    products = scalar_data.set_index(
-        pd.Series(scalar_data.index.values, name="sample")
-    ).to_xarray()
+    scalar_data.index.name = "sample"
+    products = scalar_data.to_xarray()
     products.attrs.update(scalar_data.attrs)  # propagate attributes
     for grp in ["Centre", "Depth", "Width"]:
         arr = (
@@ -178,13 +199,13 @@ def product_dataset_to_xarray(
 
 
 def open_tsg(
-    directory,
-    image=True,
-    index_coord="sample",
-    lazy=True,
-    chunks=None,
+    directory: str | Path,
+    image: bool = True,
+    index_coord: str = "sample",
+    lazy: bool = True,
+    chunks: int | dict | None = None,
     **kwargs,
-):
+) -> xarray.DataTree:
     """
     Open a TSG dataset.
 
@@ -192,18 +213,22 @@ def open_tsg(
     ----------
     directory : str | pathlib.Path
         Directory of the TSG datset to load.
-    spectra : str
-        Which spectra to load by default, NIR or TIR.
     image : bool
         Whether to load the high-resolution RGB imagery.
     index_coord : str
         Index coordinate to use for the dataset.
         Using "depth" requires some post-processing and dropping duplicates.
+    lazy : bool
+        Whether to load the dataset lazily (default), or otherwise
+        load after the data structure is ready.
+    chunks : int | dict | None
+        Chunking specification for the dataset, if you're planning to
+        use `dask`.
 
     Returns
     -------
-    xarray.Dataset
-        Dataset containing the spectra and associated data.
+    xarray.DataTree
+        DataTree containing the spectra and associated data.
     """
     directory = Path(directory)
 
