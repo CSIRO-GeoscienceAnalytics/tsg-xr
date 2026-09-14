@@ -266,34 +266,37 @@ totalling 155 MB.
 
 Loading the whole dataset *without an image*:
 ```python
+> %timeit open_tsg(hyloggerdir, image=False, lazy=False) # lazy tsg-xr, loaded
+952 ms ± 24.9 ms per loop (mean ± std. dev. of 7 runs, 1 loop each)
+
 > %timeit open_tsg(hyloggerdir, image=False) # lazy tsg-xr
-1.9 s ± 41.7 ms per loop (mean ± std. dev. of 7 runs, 1 loop each)
+847 ms ± 4.15 ms per loop (mean ± std. dev. of 7 runs, 1 loop each)
 
 > %timeit read_package(hyloggerdir, read_cras_file=False) # pytsg
-363 ms ± 5.28 ms per loop (mean ± std. dev. of 7 runs, 1 loop each)
+420 ms ± 17.3 ms per loop (mean ± std. dev. of 7 runs, 1 loop each)
 ```
 
 Loading the dataset *with an image*:
 
 ```python
 %timeit open_tsg(hyloggerdir, image=True, lazy=False) # tsg-xr
-6.3 s ± 364 ms per loop (mean ± std. dev. of 7 runs, 1 loop each)
+5.24 s ± 1.39 s per loop (mean ± std. dev. of 7 runs, 1 loop each)
 
 %timeit open_tsg(hyloggerdir, image=True) # lazy tsg-xr
-2.32 s ± 211 ms per loop (mean ± std. dev. of 7 runs, 1 loop each)
+1.06 s ± 36.3 ms per loop (mean ± std. dev. of 7 runs, 1 loop each)
 
 %timeit read_package(hyloggerdir, read_cras_file=True) # pytsg
-9.91 s ± 644 ms per loop (mean ± std. dev. of 7 runs, 1 loop each)
+9.72 s ± 443 ms per loop (mean ± std. dev. of 7 runs, 1 loop each)
 ```
 
 Reading a TSG spectral dataset:
 
 ```python
 > %timeit xarray.open_dataset(tsgfile, engine="tsg") # lazy tsg-xr
-1 s ± 52.6 ms per loop (mean ± std. dev. of 7 runs, 1 loop each)
+494 ms ± 20.5 ms per loop (mean ± std. dev. of 7 runs, 1 loop each)
 
 > %timeit pytsg.parse_tsg.read_tsg_bip_pair(tsgfile, bipfile, "NIR",) # pytsg
-184 ms ± 6.77 ms per loop (mean ± std. dev. of 7 runs, 1 loop each)
+185 ms ± 5.58 ms per loop (mean ± std. dev. of 7 runs, 1 loop each)
 ```
 
 ### Large Dataset: `Barnicarndy 1`
@@ -305,10 +308,10 @@ Loading the whole dataset *without an image*:
 
 ```python
 > %timeit open_tsg(hyloggerdir, image=False) # lazy tsg-xr
-36.2 s ± 19.7 s per loop (mean ± std. dev. of 7 runs, 1 loop each)
+9.92 s ± 696 ms per loop (mean ± std. dev. of 7 runs, 1 loop each)
 
 > %timeit read_package(hyloggerdir, read_cras_file=False) # pytsg
-4.8 s ± 38.8 ms per loop (mean ± std. dev. of 7 runs, 1 loop each)
+4.59 s ± 161 ms per loop (mean ± std. dev. of 7 runs, 1 loop each)
 ```
 
 Loading the dataset *with an image* (note: won't fit in memory, so `pytsg` metric not 
@@ -316,15 +319,15 @@ given here):
 
 ```python
 %timeit open_tsg(hyloggerdir, image=True) # lazy tsg-xr
-28 s ± 692 ms per loop (mean ± std. dev. of 7 runs, 1 loop each)
+11.4 s ± 108 ms per loop (mean ± std. dev. of 7 runs, 1 loop each)
 ```
 
 Reading a TSG spectral dataset:
 
 ```python
 > %timeit xarray.open_dataset(tsgfile, engine="tsg") # lazy tsg-xr
-13.3 s ± 625 ms per loop (mean ± std. dev. of 7 runs, 1 loop each)
+5.19 s ± 118 ms per loop (mean ± std. dev. of 7 runs, 1 loop each)
 
 > %timeit pytsg.parse_tsg.read_tsg_bip_pair(tsgfile, bipfile, "NIR",) # pytsg
-2.67 s ± 113 ms per loop (mean ± std. dev. of 7 runs, 1 loop each)
+2.46 s ± 87.3 ms per loop (mean ± std. dev. of 7 runs, 1 loop each)
 ```
