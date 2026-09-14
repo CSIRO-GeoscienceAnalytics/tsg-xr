@@ -241,16 +241,6 @@ class BIPBackendArray(xarray.backends.BackendArray):
                 dtype=self.dtype,
             ).reshape(2, nsamples, self.info["coordinates"]["lastband"])
 
-        # these need to be integer-indexed
-        # arr = xarray.DataArray(
-        #     arr,
-        #     dims=("half", "sample", "wavelength"),
-        #     coords={
-        #         "half": np.arange(2),
-        #         "sample": np.arange(start, stop, dtype="uint32"),
-        #         "wavelength": np.arange(self.wavelength.size),
-        #     },
-        # )
         if start != 0:
             key = list(key)  # copy key
             if isinstance(key1, slice):
@@ -582,18 +572,6 @@ class CRASBackendArray(xarray.backends.BackendArray):
                 chunkdata = f.read(length)
                 arrays += [np.flipud(decode_jpeg(chunkdata, colorspace="BGR"))]
         arr = np.vstack(arrays)
-        # could modify key to offset the start of key[0] by -(self.header.chunksize * chunkidx_start)
-        # this is more verbose but useful for debugging where needed...
-        # arr = xarray.DataArray(
-        #     arr,
-        #     dims=("x", "y", "channel"),
-        #     coords={
-        #         "x": np.arange(arr.shape[0], dtype="uint64")
-        #         + self.header.chunksize * chunkidx_start,
-        #     },
-        # )
-        # if isinstance(key, int):
-        #     arr = arr.squeeze()
         if start != 0:
             key = list(key)  # copy key
             if isinstance(key0, slice):
