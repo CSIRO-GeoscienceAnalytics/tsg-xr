@@ -75,7 +75,12 @@ def _reindex_depth(
     fltr = pd.Series(template.depth).duplicated().values
     template = template.sel(sample=~fltr)
     sortidx = np.argsort(template.depth.values)
-    return da.isel(sample=sortidx).swap_dims({"sample": "depth"}).sortby("depth")
+    return (
+        da.sel(sample=~fltr)
+        .isel(sample=sortidx)
+        .swap_dims({"sample": "depth"})
+        .sortby("depth")
+    )
 
 
 def reorder_variables(

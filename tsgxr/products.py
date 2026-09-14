@@ -208,6 +208,59 @@ def get_product_colormap(
     ]
 
 
+def unstack_arbitrary_feature_data(ds: xarray.Dataset, dtype=np.half) -> xarray.Dataset:
+    """
+    Unstack the arbitrary spectral feature data from a dataset
+    (Centres, Depths, Widths) into a full image dataset with
+    dimensions (sample, wavelength).
+
+    Parameters
+    ----------
+    ds : xarray.Dataset
+        Spectral dataset will Centres, Widths and Depths as data variables.
+    dtype : type
+        Data type to use for the output.
+
+    Returns
+    -------
+    xarray.Dataset
+    """
+    idx = "depth" if ("depth" in ds.dims) else "sample"
+    complement = "sample" if idx == "depth" else "depth"
+    extra_coords = [
+        complement,
+        "tray",
+        "section-part",
+        "section-position",
+        "hole",
+        "section",
+    ]
+    # note: not all depths or wavelengths might be represented here
+    # we need to reindex coordinates along depth/sample as as result
+    return (
+        ds[["Centres", "Depths", "Widths"]]
+        .stack(z=["feature", idx])
+        .drop_vars(extra_coords)
+        .to_dataframe()
+        .reset_index()
+        .drop(columns="feature")
+        .rename(columns={"Centres": "wavelength"})
+        .sort_values([idx, "wavelength"])
+        .drop_duplicates(subset=[idx, "wavelength"])
+        .set_index([idx, "wavelength"])
+        .astype(dtype)
+        .to_xarray()
+    ).assign_coords(
+        {
+            c: (idx, ds.sel({idx: ds[idx]}, method="nearest")[c].values)
+            if idx in ds[c].dims
+            else ds[c]
+            for c in extra_coords
+            if c in ds
+        }
+    )
+
+
 def plot_product_downhole(
     ds: xarray.Dataset,
     which: str,
