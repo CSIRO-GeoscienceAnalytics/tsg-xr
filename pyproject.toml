@@ -47,14 +47,11 @@ tsg = "tsgxr.xarray_plugin:TSGBIPBackend"
 [project.optional-dependencies]
 notebook = ['ipykernel']
 docs = [
-  "sphinx_rtd_theme",
+  "sphinx_book_theme",
   "docutils",
   "sphinx>=4",
   "sphinx-autodoc-annotation",
-  "sphinx_gallery",
   "myst-parser",
-  "nbsphinx",
-  "ipykernel",                 # for nbsphinx to find a kernel
 ]
 test = ["pytest", "pytest-cov", "coverage"]
 dev = ["build", "ruff", "tsgxr[notebook,test,docs]"]

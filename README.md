@@ -30,10 +30,8 @@ DT : xarray.DataTree = open_tsg("./Hylogger_Hole_42")
 Key array-based data can be accessed directly from this `xarray.Datatree` object:
 
 ```python
-DT['NIR/Spectra']: xarray.Dataset
-DT['NIR/Products']: xarray.Dataset
-DT['TIR/Spectra']: xarray.Dataset
-DT['TIR/Products']: xarray.Dataset
+DT['NIR']: xarray.Dataset
+DT['TIR']: xarray.Dataset
 DT['Image']: xarray.Dataset
 DT['Lidar']: xarray.Dataset
 ```
@@ -51,10 +49,10 @@ plt.gca().set(aspect="equal"); # fix the aspect ratio
 Similarly, to plot the spectra from a specific interval (e.g. 9.2 to 9.3m here) against wavelength, you can provide a slice to the `xarray.DataArray.sel` method:
 
 ```python
-spectra : xarray.DataArray = DT["NIR/Spectra"].ds["Spectra"]
+spectra : xarray.DataArray = DT["NIR"].ds["Spectra"]
 
 spectra.sel(depth=slice(9.2, 9.3)).plot.line(
-    x="wavelength", add_legend=False, color="k", alpha=0.5
+    x="wavelength", add_legend=False, color="k", alpha=0.51
 )
 ```
 
@@ -63,16 +61,14 @@ spectra.sel(depth=slice(9.2, 9.3)).plot.line(
 Scalars and other spectral features are also available; spectral feature (centre, depth, width) data is grouped for brevity:
 
 ```python
-products: xarray.Dataset = DT["NIR"]["Products"].ds
-
-products.Centres
-products.Depths
-products.Widths
-products["Grp1 sTSAS"]
+DT["NIR"].ds.Centres
+DT["NIR"].ds.Depths
+DT["NIR"].ds.Widths
+DT["NIR"].ds["Grp1 sTSAS"]
 ...
-products["Min1 sTSAS"]
+DT["NIR"].ds["Min1 sTSAS"]
 ...
-products["Wt1 sTSAS"]
+DT["NIR"].ds["Wt1 sTSAS"]
 ...
 ```
 
@@ -145,168 +141,110 @@ DT : xarray.DataTree = open_tsg(
 ```
 <xarray.DataTree>
 Group: /
-├── Group: /Lidar
-│       Dimensions:           (depth: 21350)
-│       Coordinates:
-│         * depth             (depth) float64 171kB 0.004111 0.004112 ... 143.6 143.6
-│           sample            (depth) uint64 171kB 1 4 2 5 0 ... 21346 21347 21348 21349
-│           tray              (depth) int64 171kB ...
-│           section           (depth) int64 171kB ...
-│           section-part      (depth) int64 171kB ...
-│           section-position  (depth) float64 171kB ...
-│           hole              (depth) object 171kB ...
-│       Data variables:
-│           Lidar             (depth) float32 85kB 92.44 75.37 75.98 ... 64.72 64.76
 ├── Group: /NIR
-│   ├── Group: /NIR/Spectra
-│   │       Dimensions:           (depth: 21350, wavelength: 531)
-│   │       Coordinates:
-│   │         * depth             (depth) float64 171kB 0.004111 0.004112 ... 143.6 143.6
-│   │           sample            (depth) uint64 171kB 1 4 2 5 0 ... 21346 21347 21348 21349
-│   │           tray              (depth) int64 171kB ...
-│   │           section           (depth) int64 171kB ...
-│   │           section-part      (depth) int64 171kB ...
-│   │           section-position  (depth) float64 171kB ...
-│   │           hole              (depth) object 171kB ...
-│   │         * wavelength        (wavelength) float64 4kB 380.0 384.0 ... 2.496e+03 2.5e+03
-│   │           band              (wavelength) int64 4kB ...
-│   │       Data variables:
-│   │           Spectra           (depth, wavelength) float32 45MB ...
-│   │       Attributes: (12/38)
-│   │           core_qual:                 ['Void', 'Rubble', 'Crack', 'Core']
-│   │           TSA704_S Minerals:         ['Opal', 'Dickite', 'Kaolinite-PX', 'Kaolinite...
-│   │           Tray:                      ['0001', '0002', '0003', '0004', '0005', '0006...
-│   │           TSA704_V Groups:           ['MISC-SILICATE', 'CARBONATE', 'SULPHATE', 'OX...
-│   │           HyLogDiag:                 ['wc ws', 'al wc ws', 'wc ws pz', 'al wc ws pz...
-│   │           RockMarks:                 []
-│   │           ...                        ...
-│   │           tsasettings 1:             {'items_full': '17', 'items_sub': '6', 'trains...
-│   │           sclrsets:                  {}
-│   │           domain 0:                  {'name': 'Default', 'samp0': '0', 'samp1': '23...
-│   │           events:                    {}
-│   │           wavelength specs:          {'start': 380.0, 'end': 2500.0, 'unit': 'nm'}
-│   │           batch:                     {'commands': '1', 'name': 'Kahuna,15', 'descri...
-│   └── Group: /NIR/Products
-│           Dimensions:                    (depth: 21350, feature: 25, wavelength: 531)
-│           Coordinates:
-│             * depth                      (depth) float64 171kB 0.004111 0.004112 ... 143.6
-│               sample                     (depth) uint64 171kB 1 4 2 ... 21347 21348 21349
-│               tray                       (depth) int64 171kB ...
-│               section                    (depth) int64 171kB ...
-│               section-part               (depth) int64 171kB ...
-│               section-position           (depth) float64 171kB ...
-│               hole                       (depth) object 171kB ...
-│             * feature                    (feature) <U2 200B '1' '2' '3' ... '23' '24' '25'
-│             * wavelength                 (wavelength) float64 4kB 380.0 384.0 ... 2.5e+03
-│               band                       (wavelength) int64 4kB ...
-│           Data variables: (12/69)
-│               HoleID                     (depth) object 171kB ...
-│               Date                       (depth) float32 85kB ...
-│               Depth (m)                  (depth) float32 85kB ...
-│               Tray                       (depth) <U16 1MB ...
-│               Section                    (depth) float32 85kB ...
-│               Centres                    (feature, depth) float32 2MB ...
-│               ...                         ...
-│               TIDL Depth Backup          (depth) float32 85kB ...
-│               TraySamp                   (depth) float32 85kB ...
-│               colour mod_sat_intens      (depth) float32 85kB ...
-│               core_qual                  (depth) float32 85kB ...
-│               prof_min                   (depth) float32 85kB ...
-│               sec_end_mask               (depth) float32 85kB ...
-│           Attributes: (12/38)
-│               core_qual:                 ['Void', 'Rubble', 'Crack', 'Core']
-│               TSA704_S Minerals:         ['Opal', 'Dickite', 'Kaolinite-PX', 'Kaolinite...
-│               Tray:                      ['0001', '0002', '0003', '0004', '0005', '0006...
-│               TSA704_V Groups:           ['MISC-SILICATE', 'CARBONATE', 'SULPHATE', 'OX...
-│               HyLogDiag:                 ['wc ws', 'al wc ws', 'wc ws pz', 'al wc ws pz...
-│               RockMarks:                 []
-│               ...                        ...
-│               tsasettings 1:             {'items_full': '17', 'items_sub': '6', 'trains...
-│               sclrsets:                  {}
-│               domain 0:                  {'name': 'Default', 'samp0': '0', 'samp1': '23...
-│               events:                    {}
-│               wavelength specs:          {'start': 380.0, 'end': 2500.0, 'unit': 'nm'}
-│               batch:                     {'commands': '1', 'name': 'Kahuna,15', 'descri...
+│       Dimensions:                    (depth: 19754, wavelength: 531, feature: 25)
+│       Coordinates:
+│         * depth                      (depth) float32 79kB 0.004111 0.004112 ... 156.0
+│           sample                     (depth) uint64 158kB dask.array<chunksize=(512,), meta=np.ndarray>
+│           tray                       (depth) uint16 40kB dask.array<chunksize=(512,), meta=np.ndarray>
+│           section                    (depth) uint8 20kB dask.array<chunksize=(512,), meta=np.ndarray>
+│           section-part               (depth) uint8 20kB dask.array<chunksize=(512,), meta=np.ndarray>
+│           section-position           (depth) float32 79kB dask.array<chunksize=(512,), meta=np.ndarray>
+│           hole                       (depth) object 158kB dask.array<chunksize=(512,), meta=np.ndarray>
+│         * wavelength                 (wavelength) float64 4kB 380.0 384.0 ... 2.5e+03
+│           band                       (wavelength) int64 4kB dask.array<chunksize=(512,), meta=np.ndarray>
+│         * feature                    (feature) uint8 25B 0 1 2 3 4 ... 20 21 22 23 24
+│       Data variables: (12/54)
+│           Spectra                    (depth, wavelength) float32 42MB dask.array<chunksize=(512, 512), meta=np.ndarray>
+│           Centres                    (depth, feature) float32 2MB dask.array<chunksize=(512, 25), meta=np.ndarray>
+│           Depths                     (depth, feature) float32 2MB dask.array<chunksize=(512, 25), meta=np.ndarray>
+│           Widths                     (depth, feature) float32 2MB dask.array<chunksize=(512, 25), meta=np.ndarray>
+│           Grp1 sTSAS                 (depth) object 158kB dask.array<chunksize=(512,), meta=np.ndarray>
+│           Grp1 sTSAV                 (depth) object 158kB dask.array<chunksize=(512,), meta=np.ndarray>
+│           ...                         ...
+│           Kahuna                     (depth) float32 79kB dask.array<chunksize=(512,), meta=np.ndarray>
+│           TIDL Depth Backup          (depth) float32 79kB dask.array<chunksize=(512,), meta=np.ndarray>
+│           colour mod_sat_intens      (depth) float32 79kB dask.array<chunksize=(512,), meta=np.ndarray>
+│           core_qual                  (depth) float32 79kB dask.array<chunksize=(512,), meta=np.ndarray>
+│           prof_min                   (depth) float32 79kB dask.array<chunksize=(512,), meta=np.ndarray>
+│           sec_end_mask               (depth) float32 79kB dask.array<chunksize=(512,), meta=np.ndarray>
+│       Attributes: (12/34)
+│           core_qual:                 ['Void', 'Rubble', 'Crack', 'Core']
+│           TSA704_S Minerals:         ['Opal', 'Dickite', 'Kaolinite-PX', 'Kaolinite...
+│           TSA704_V Groups:           ['MISC-SILICATE', 'CARBONATE', 'SULPHATE', 'OX...
+│           HyLogDiag:                 ['wc ws', 'al wc ws', 'wc ws pz', 'al wc ws pz...
+│           RockMarks:                 []
+│           TSA704_V Minerals:         ['Chrysocolla', 'Lazurite', 'Malachite', 'Jaro...
+│           ...                        ...
+│           tsasettings 1:             {'items_full': '17', 'items_sub': '6', 'trains...
+│           sclrsets:                  {}
+│           domain 0:                  {'name': 'Default', 'samp0': '0', 'samp1': '23...
+│           events:                    {}
+│           wavelength specs:          {'start': 380.0, 'end': 2500.0, 'unit': 'nm'}
+│           batch:                     {'commands': '1', 'name': 'Kahuna,15', 'descri...
 ├── Group: /TIR
-│   ├── Group: /TIR/Spectra
-│   │       Dimensions:           (depth: 21350, wavelength: 341)
-│   │       Coordinates:
-│   │         * depth             (depth) float64 171kB 0.004111 0.004112 ... 143.6 143.6
-│   │           sample            (depth) uint64 171kB 1 4 2 5 0 ... 21346 21347 21348 21349
-│   │           tray              (depth) int64 171kB ...
-│   │           section           (depth) int64 171kB ...
-│   │           section-part      (depth) int64 171kB ...
-│   │           section-position  (depth) float64 171kB ...
-│   │           hole              (depth) object 171kB ...
-│   │         * wavelength        (wavelength) float64 3kB 6e+03 6.025e+03 ... 1.45e+04
-│   │           band              (wavelength) int64 3kB ...
-│   │       Data variables:
-│   │           Spectra           (depth, wavelength) float32 29MB ...
-│   │       Attributes: (12/32)
-│   │           TSA703_T Groups:           ['SILICA', 'K-FELDSPAR', 'PLAGIOCLASE', 'GARNE...
-│   │           TSA703_T Minerals:         ['Opal', 'Quartz', 'Anorthoclase', 'Microcline...
-│   │           HoleID:                    ['stavely_17']
-│   │           Domain:                    ['Default']
-│   │           HyLogDiag:                 ['wc ws', 'al wc ws', 'wc ws pz', 'al wc ws pz...
-│   │           RockMarks:                 []
-│   │           ...                        ...
-│   │           tsatircal:                 {'tirq': '0.000875 0.000890 0.000905 0.000918 ...
-│   │           sclrsets:                  {}
-│   │           domain 0:                  {'name': 'Default', 'samp0': '0', 'samp1': '23...
-│   │           events:                    {}
-│   │           wavelength specs:          {'start': 6000.0, 'end': 14500.0, 'unit': 'nm'}
-│   │           batch:                     {'commands': '12', 'name': 'Restrahlen_feature...
-│   └── Group: /TIR/Products
-│           Dimensions:                        (depth: 21350, feature: 25, wavelength: 341)
-│           Coordinates:
-│             * depth                          (depth) float64 171kB 0.004111 ... 143.6
-│               sample                         (depth) uint64 171kB 1 4 2 ... 21348 21349
-│               tray                           (depth) int64 171kB ...
-│               section                        (depth) int64 171kB ...
-│               section-part                   (depth) int64 171kB ...
-│               section-position               (depth) float64 171kB ...
-│               hole                           (depth) object 171kB ...
-│             * feature                        (feature) <U2 200B '1' '2' '3' ... '24' '25'
-│             * wavelength                     (wavelength) float64 3kB 6e+03 ... 1.45e+04
-│               band                           (wavelength) int64 3kB ...
-│           Data variables: (12/62)
-│               HoleID                         (depth) object 171kB ...
-│               Date                           (depth) float32 85kB ...
-│               Depth (m)                      (depth) float32 85kB ...
-│               Tray                           (depth) <U16 1MB ...
-│               Section                        (depth) float32 85kB ...
-│               Centres                        (feature, depth) float32 2MB ...
-│               ...                             ...
-│               SecDist (mm)                   (depth) float32 85kB ...
-│               SecSamp                        (depth) float32 85kB ...
-│               Subpix                         (depth) float32 85kB ...
-│               TIRDeltaTemp                   (depth) float32 85kB ...
-│               TirBkgOffset                   (depth) float32 85kB ...
-│               TraySamp                       (depth) float32 85kB ...
-│           Attributes: (12/32)
-│               TSA703_T Groups:           ['SILICA', 'K-FELDSPAR', 'PLAGIOCLASE', 'GARNE...
-│               TSA703_T Minerals:         ['Opal', 'Quartz', 'Anorthoclase', 'Microcline...
-│               HoleID:                    ['stavely_17']
-│               Domain:                    ['Default']
-│               HyLogDiag:                 ['wc ws', 'al wc ws', 'wc ws pz', 'al wc ws pz...
-│               RockMarks:                 []
-│               ...                        ...
-│               tsatircal:                 {'tirq': '0.000875 0.000890 0.000905 0.000918 ...
-│               sclrsets:                  {}
-│               domain 0:                  {'name': 'Default', 'samp0': '0', 'samp1': '23...
-│               events:                    {}
-│               wavelength specs:          {'start': 6000.0, 'end': 14500.0, 'unit': 'nm'}
-│               batch:                     {'commands': '12', 'name': 'Restrahlen_feature...
+│       Dimensions:                        (depth: 19754, wavelength: 341, feature: 25)
+│       Coordinates:
+│         * depth                          (depth) float32 79kB 0.004111 ... 156.0
+│           sample                         (depth) uint64 158kB dask.array<chunksize=(512,), meta=np.ndarray>
+│           tray                           (depth) uint16 40kB dask.array<chunksize=(512,), meta=np.ndarray>
+│           section                        (depth) uint8 20kB dask.array<chunksize=(512,), meta=np.ndarray>
+│           section-part                   (depth) uint8 20kB dask.array<chunksize=(512,), meta=np.ndarray>
+│           section-position               (depth) float32 79kB dask.array<chunksize=(512,), meta=np.ndarray>
+│           hole                           (depth) object 158kB dask.array<chunksize=(512,), meta=np.ndarray>
+│         * wavelength                     (wavelength) float64 3kB 6e+03 ... 1.45e+04
+│           band                           (wavelength) int64 3kB dask.array<chunksize=(341,), meta=np.ndarray>
+│         * feature                        (feature) uint8 25B 0 1 2 3 4 ... 21 22 23 24
+│       Data variables: (12/47)
+│           Spectra                        (depth, wavelength) float32 27MB dask.array<chunksize=(512, 341), meta=np.ndarray>
+│           Centres                        (depth, feature) float32 2MB dask.array<chunksize=(512, 25), meta=np.ndarray>
+│           Depths                         (depth, feature) float32 2MB dask.array<chunksize=(512, 25), meta=np.ndarray>
+│           Widths                         (depth, feature) float32 2MB dask.array<chunksize=(512, 25), meta=np.ndarray>
+│           Grp1 sTSAT                     (depth) object 158kB dask.array<chunksize=(512,), meta=np.ndarray>
+│           Grp1 uTSAT                     (depth) object 158kB dask.array<chunksize=(512,), meta=np.ndarray>
+│           ...                             ...
+│           Interactive Depth Logging      (depth) float32 79kB dask.array<chunksize=(512,), meta=np.ndarray>
+│           Quartz abundance               (depth) float32 79kB dask.array<chunksize=(512,), meta=np.ndarray>
+│           Restrahlen_feature_depth       (depth) float32 79kB dask.array<chunksize=(512,), meta=np.ndarray>
+│           Restrahlen_feature_wavelength  (depth) float32 79kB dask.array<chunksize=(512,), meta=np.ndarray>
+│           TIRDeltaTemp                   (depth) float32 79kB dask.array<chunksize=(512,), meta=np.ndarray>
+│           TirBkgOffset                   (depth) float32 79kB dask.array<chunksize=(512,), meta=np.ndarray>
+│       Attributes: (12/28)
+│           TSA703_T Groups:           ['SILICA', 'K-FELDSPAR', 'PLAGIOCLASE', 'GARNE...
+│           TSA703_T Minerals:         ['Opal', 'Quartz', 'Anorthoclase', 'Microcline...
+│           Domain:                    ['Default']
+│           HyLogDiag:                 ['wc ws', 'al wc ws', 'wc ws pz', 'al wc ws pz...
+│           RockMarks:                 []
+│           TSA703_T Groups_Colors:    {'SILICA': '#fee6cf', 'K-FELDSPAR': '#f00078',...
+│           ...                        ...
+│           tsatircal:                 {'tirq': '0.000875 0.000890 0.000905 0.000918 ...
+│           sclrsets:                  {}
+│           domain 0:                  {'name': 'Default', 'samp0': '0', 'samp1': '23...
+│           events:                    {}
+│           wavelength specs:          {'start': 6000.0, 'end': 14500.0, 'unit': 'nm'}
+│           batch:                     {'commands': '12', 'name': 'Restrahlen_feature...
+├── Group: /Lidar
+│       Dimensions:           (depth: 19754)
+│       Coordinates:
+│         * depth             (depth) float32 79kB 0.004111 0.004112 ... 156.0 156.0
+│           sample            (depth) uint64 158kB dask.array<chunksize=(512,), meta=np.ndarray>
+│           tray              (depth) uint16 40kB dask.array<chunksize=(512,), meta=np.ndarray>
+│           section           (depth) uint8 20kB dask.array<chunksize=(512,), meta=np.ndarray>
+│           section-part      (depth) uint8 20kB dask.array<chunksize=(512,), meta=np.ndarray>
+│           section-position  (depth) float32 79kB dask.array<chunksize=(512,), meta=np.ndarray>
+│           hole              (depth) object 158kB dask.array<chunksize=(512,), meta=np.ndarray>
+│       Data variables:
+│           Lidar             (depth) float32 79kB dask.array<chunksize=(512,), meta=np.ndarray>
 └── Group: /Image
         Dimensions:  (depth: 2898500, channel: 3, width: 926)
         Coordinates:
-          * depth    (depth) float64 23MB 0.004111 0.004177 0.004243 ... 156.0 156.0
-            section  (depth) uint16 6MB 0 0 0 0 0 0 0 0 0 ... 49 49 49 49 49 49 49 49 49
-            tray     (depth) uint16 6MB 0 0 0 0 0 0 0 0 ... 186 186 186 186 186 186 186
+          * depth    (depth) float32 12MB 0.004111 0.004177 0.004243 ... 156.0 156.0
+            section  (depth) uint16 6MB dask.array<chunksize=(512,), meta=np.ndarray>
+            tray     (depth) uint16 6MB dask.array<chunksize=(512,), meta=np.ndarray>
           * channel  (channel) int64 24B 0 1 2
           * width    (width) float64 7kB -0.03054 -0.03047 -0.0304 ... 0.03047 0.03054
         Data variables:
-            Image    (depth, width, channel) uint8 8GB ...
+            Image    (depth, width, channel) uint8 8GB dask.array<chunksize=(512, 512, 3), meta=np.ndarray>
 ```
 
 ## Performance Overview
@@ -326,34 +264,37 @@ totalling 155 MB.
 
 Loading the whole dataset *without an image*:
 ```python
+> %timeit open_tsg(hyloggerdir, image=False, lazy=False) # lazy tsg-xr, loaded
+952 ms ± 24.9 ms per loop (mean ± std. dev. of 7 runs, 1 loop each)
+
 > %timeit open_tsg(hyloggerdir, image=False) # lazy tsg-xr
-1.9 s ± 41.7 ms per loop (mean ± std. dev. of 7 runs, 1 loop each)
+847 ms ± 4.15 ms per loop (mean ± std. dev. of 7 runs, 1 loop each)
 
 > %timeit read_package(hyloggerdir, read_cras_file=False) # pytsg
-363 ms ± 5.28 ms per loop (mean ± std. dev. of 7 runs, 1 loop each)
+420 ms ± 17.3 ms per loop (mean ± std. dev. of 7 runs, 1 loop each)
 ```
 
 Loading the dataset *with an image*:
 
 ```python
 %timeit open_tsg(hyloggerdir, image=True, lazy=False) # tsg-xr
-6.3 s ± 364 ms per loop (mean ± std. dev. of 7 runs, 1 loop each)
+4.21 s ± 539 ms per loop (mean ± std. dev. of 7 runs, 1 loop each)
 
 %timeit open_tsg(hyloggerdir, image=True) # lazy tsg-xr
-2.32 s ± 211 ms per loop (mean ± std. dev. of 7 runs, 1 loop each)
+1.03 s ± 51.7 ms per loop (mean ± std. dev. of 7 runs, 1 loop each)
 
 %timeit read_package(hyloggerdir, read_cras_file=True) # pytsg
-9.91 s ± 644 ms per loop (mean ± std. dev. of 7 runs, 1 loop each)
+9.08 s ± 193 ms per loop (mean ± std. dev. of 7 runs, 1 loop each)
 ```
 
 Reading a TSG spectral dataset:
 
 ```python
 > %timeit xarray.open_dataset(tsgfile, engine="tsg") # lazy tsg-xr
-1 s ± 52.6 ms per loop (mean ± std. dev. of 7 runs, 1 loop each)
+494 ms ± 20.5 ms per loop (mean ± std. dev. of 7 runs, 1 loop each)
 
 > %timeit pytsg.parse_tsg.read_tsg_bip_pair(tsgfile, bipfile, "NIR",) # pytsg
-184 ms ± 6.77 ms per loop (mean ± std. dev. of 7 runs, 1 loop each)
+185 ms ± 5.58 ms per loop (mean ± std. dev. of 7 runs, 1 loop each)
 ```
 
 ### Large Dataset: `Barnicarndy 1`
@@ -365,10 +306,10 @@ Loading the whole dataset *without an image*:
 
 ```python
 > %timeit open_tsg(hyloggerdir, image=False) # lazy tsg-xr
-36.2 s ± 19.7 s per loop (mean ± std. dev. of 7 runs, 1 loop each)
+9.92 s ± 696 ms per loop (mean ± std. dev. of 7 runs, 1 loop each)
 
 > %timeit read_package(hyloggerdir, read_cras_file=False) # pytsg
-4.8 s ± 38.8 ms per loop (mean ± std. dev. of 7 runs, 1 loop each)
+4.59 s ± 161 ms per loop (mean ± std. dev. of 7 runs, 1 loop each)
 ```
 
 Loading the dataset *with an image* (note: won't fit in memory, so `pytsg` metric not 
@@ -376,15 +317,15 @@ given here):
 
 ```python
 %timeit open_tsg(hyloggerdir, image=True) # lazy tsg-xr
-28 s ± 692 ms per loop (mean ± std. dev. of 7 runs, 1 loop each)
+10.2 s ± 71.9 ms per loop (mean ± std. dev. of 7 runs, 1 loop each)
 ```
 
 Reading a TSG spectral dataset:
 
 ```python
 > %timeit xarray.open_dataset(tsgfile, engine="tsg") # lazy tsg-xr
-13.3 s ± 625 ms per loop (mean ± std. dev. of 7 runs, 1 loop each)
+5.19 s ± 118 ms per loop (mean ± std. dev. of 7 runs, 1 loop each)
 
 > %timeit pytsg.parse_tsg.read_tsg_bip_pair(tsgfile, bipfile, "NIR",) # pytsg
-2.67 s ± 113 ms per loop (mean ± std. dev. of 7 runs, 1 loop each)
+2.46 s ± 87.3 ms per loop (mean ± std. dev. of 7 runs, 1 loop each)
 ```

@@ -1,4 +1,3 @@
-import inspect
 import re
 from pathlib import Path
 
@@ -7,7 +6,11 @@ import pandas as pd
 import pytsg.parse_tsg
 import xarray
 
-from .products import bgrint_to_rgb
+from .products import (
+    get_available_systems,
+    products_to_group_table,
+    products_to_mineral_table,
+)
 from .util import Handle
 
 logger = Handle(__name__)
@@ -16,96 +19,97 @@ SPECTRAL_MAPPING = {"tsg": "NIR", "tir": "TIR", "mir": "MIR"}
 
 
 def interpolate_section_depths(
-    section_depths: np.ndarray, ninterp: int | np.ndarray
+    template: xarray.DataArray | xarray.Dataset, sections: np.rec.recarray
 ) -> np.ndarray:
     """
     Interpolate section depths based on a number of interpolated samples.
 
     Parameters
     ----------
-    section_depths : numpy.ndarray (n_sections, 2)
-        Array containing the minimum and maximum depths of each section.
-    ninterp : int | numpy.ndarray (n_sections)
-        Either a constant number of divisions or a number of divisions per section.
+    template: xarray.DataArray | xarray.Dataset
+        Data structure containing the requisite tray, section and depth coordinates.
+    sections : np.rec.recarray
+        Record array containing the 'nlines' information per-section.
 
     Returns
     -------
     numpy.ndarray (nsamples, )
-        Interpoalted within-section depths.
+        Interpolated within-section depths.
     """
 
-    assert isinstance(ninterp, (int, np.ndarray, list))
-    if isinstance(ninterp, int):
-        ninterp = np.ones(section_depths.shape[0]) * ninterp
+    idx = pd.MultiIndex.from_arrays(
+        [template.tray.values, template.section.values], names=["tray", "section"]
+    )
+    section_depths = (
+        pd.Series(template.depth.values).groupby(idx).agg(["min", "max"]).to_xarray()
+    )
+    section_depths["index"] = pd.MultiIndex.from_arrays(
+        np.array(list(section_depths["index"].values)).T, names=["tray", "section"]
+    )
+
+    assert len(sections) == len(section_depths["min"]), (
+        f"Length of sections record array ({len(sections)}) doesn't match the depth metadata ({len(section_depths['min'])})."
+    )
+
+    if (sections["nlines"] == sections["nlines"][0]).all():
+        # all have the same number of lines
+        section_depth_interp = (
+            np.linspace(0, 1, sections["nlines"][0], dtype=section_depths["max"].dtype)[
+                None, :
+            ]
+            * (section_depths["max"] - section_depths["min"]).values[:, None]
+            + section_depths["min"].values[:, None]
+        ).ravel()
     else:
-        ninterp = np.array(ninterp)
-        assert ninterp.dtype.kind in ["i", "u"]
-    return np.hstack(
-        [np.linspace(mn, mx, nint) for (nint, (mn, mx)) in zip(ninterp, section_depths)]
-    )
-
-
-def coords_from_sampleheaders(headers: pd.DataFrame, wavelengths) -> dict:
-    """
-    Turn the sample headers of a TSG spectral subset into coordinates.
-
-    Parameters
-    ----------
-    spectraldata  : pytsg.parse_tsg.Spectra
-        Spectral subset loaded with pytsg.
-
-    Returns
-    -------
-    coords : dict
-        Mapping of coordinate names to values, and in the case of non-index coordinates
-        the corresponding index coordinate.
-    """
-    sampleheaders = (headers).rename(
-        columns={
-            "sample": "sample",
-            "T": "tray",
-            "L": "section",
-            "P": "section-part",
-            "D": "depth",
-            "X": "section-position",
-            "H": "hole",
-        }
-    )
-    for k in sampleheaders.columns:  # try to convert numeric data
-        try:
-            sampleheaders[k] = sampleheaders[k].apply(pd.to_numeric)
-        except ValueError:
-            pass
-
-    # note that depths can be duplicated, so would need to be
-    # post-processed to be used as an index
-    coords = {
-        "sample": sampleheaders["sample"].values,
-        "wavelength": wavelengths,
-        "band": ("wavelength", np.arange(wavelengths.size)),
-    }
-    coords.update(
-        {
-            c: ("sample", d.values)
-            for c, d in sampleheaders.items()
-            if c not in ["sample"]
-        }
-    )
-    return coords
+        section_depth_interp = np.hstack(
+            [
+                np.linspace(mn, mx, nint, dtype=section_depths["max"].dtype)
+                for (mn, mx, nint) in zip(
+                    section_depths["min"].values,
+                    section_depths["max"].values,
+                    sections["nlines"],
+                    strict=True,
+                )
+            ]
+        )
+    return section_depth_interp
 
 
 def _reindex_depth(
-    da: xarray.DataArray, template: xarray.Dataset | xarray.DataArray | None = None
-) -> xarray.DataArray:
+    da: xarray.DataArray | xarray.Dataset,
+    template: xarray.Dataset | xarray.DataArray | None = None,
+) -> xarray.DataArray | xarray.Dataset:
+    """
+    Reindex a dataset such that it's indexed by depth.
 
+    Parameters
+    ----------
+    da : xarray.DataArray | xarray.Dataset
+        Dataset to reindex.
+    template : xarray.DataArray | xarray.Dataset | None
+        Template to use to get sample-depth indexing information from;
+        where not provided this is expected to be taken from the input `da`.
+
+    Returns
+    -------
+    xarray.DataArray | xarray.Dataset
+        Reindexed dataset.
+
+    Notes
+    -----
+    This is a lossy process where depth is duplicated.
+    """
     # remove samples where the depth is a duplicate, and sort by depth
     # to allow depth as an index
     if template is None:
         template = da
     fltr = pd.Series(template.depth).duplicated().values
-    template = template.sel(sample=~fltr)
-    sortidx = np.argsort(template.depth.values)
-    return da.isel(sample=sortidx).swap_dims({"sample": "depth"}).sortby("depth")
+    return (
+        da.sel(sample=~fltr)
+        .isel(sample=np.argsort(template.sel(sample=~fltr).depth.values))
+        .swap_dims({"sample": "depth"})
+        .sortby("depth")
+    )
 
 
 def reorder_variables(
@@ -146,7 +150,11 @@ def reorder_variables(
             "Bound_Water",
             "Unbound_Water",
         ]
-    arrangement = [
+    arrangement = []
+    # these occur where collapse_products=True, if they're there put them first.
+    arrangement += sorted([v for v in ds.data_vars if "_Grp" in v or "_Min" in v])
+    # The first of these are e.g. coordinates and would typically get dropped
+    arrangement += [
         v
         for v in [
             "HoleID",
@@ -158,7 +166,7 @@ def reorder_variables(
             "Depths",
             "Widths",
         ]
-        if v in ds.data_vars
+        if v in ds.data_vars and v not in arrangement
     ]
 
     arrangement += [
@@ -180,7 +188,12 @@ def reorder_variables(
     return ds
 
 
-def product_dataset_to_xarray(scalars: pd.DataFrame, classes: dict) -> xarray.Dataset:
+def product_dataset_to_xarray(
+    scalars: pd.DataFrame,
+    collapse_products: bool = False,
+    drop_vars=None,
+    drop_singular=True,
+) -> xarray.Dataset:
     """
     Transform a set of spectral products/scalars into xarray.align
 
@@ -188,41 +201,49 @@ def product_dataset_to_xarray(scalars: pd.DataFrame, classes: dict) -> xarray.Da
     ----------
     scalars  : pandas.DataFrame
         Dataframe of loaded by pytsg.
-    classes : dict
-        Mapping of classes, to be added as attributes.
+    collapse_products : bool
+        Whether to collapse products to a singular table per system,
+        rather than multiple e.g. Min1, Min2, ..
+    drop_vars : list
+        List of variables to drop, typically due to being duplicated as coordinates.
+    drop_singular : bool
+        Whether to drop singular values which are propagated across the products.
 
     Returns
     -------
     xarray.Dataset
+
+    Notes
+    -----
+    * Note that group is essentially redundant, could be a coordinate on mineral.
     """
+    if drop_vars is None:
+        drop_vars = [
+            "HoleID",
+            "Date",
+            "Depth (m)",
+            "Tray",
+            "Section",
+            "NumFeats",
+            "SecDist (mm)",
+            "SecSamp",
+            "TraySamp",
+        ]
     scalar_data = scalars.copy()  # pd.DataFrame
-    # could drop emtpy columns but is unlikely to be many
-    products = scalar_data.set_index(
-        pd.Series(scalar_data.index.values, name="sample")
-    ).to_xarray()
-    products.attrs.update(  # the indexes are recoverable where desired; dropped here
-        {ch.name: [v for i, v in ch.classes.items()] for ID, ch in classes.items()}
-    )
-    # add colors where they exist
-    products.attrs.update(
-        {
-            ch.name + "_Colors": dict(
-                zip(
-                    (v for i, v in ch.classes.items()),
-                    [
-                        f"#{r:02x}{b:02x}{g:02x}"
-                        for (r, g, b) in (
-                            bgrint_to_rgb(np.array(ch.colors, dtype="int")) * 255
-                        )
-                        .round(0)
-                        .astype(int)
-                    ],
-                )
-            )
-            for ID, ch in classes.items()
-            if (getattr(ch, "colors", None) is not None)
+    if drop_vars:
+        scalar_data = scalar_data.drop(
+            columns=[v for v in drop_vars if v in scalar_data.columns]
+        )
+        # some of the dropped variables are classes, which might also have colormaps
+        scalar_data.attrs = {
+            k: v
+            for k, v in scalar_data.attrs.items()
+            if ((k not in drop_vars) and (k.replace("_Colors", "") not in drop_vars))
         }
-    )
+    # could drop emtpy columns but is unlikely to be many
+    scalar_data.index.name = "sample"
+    products = scalar_data.to_xarray()
+    products.attrs.update(scalar_data.attrs)  # propagate attributes
     for grp in ["Centre", "Depth", "Width"]:
         arr = (
             products[[v for v in products.data_vars if re.match(grp + r"\d+", v)]]
@@ -232,154 +253,61 @@ def product_dataset_to_xarray(scalars: pd.DataFrame, classes: dict) -> xarray.Da
         products = products[
             [v for v in products.data_vars if v not in arr.coords["feature"]]
         ]
-        arr["feature"] = [f.replace(grp, "") for f in arr["feature"].values]
+        # # [f.replace(grp, "") for f in arr["feature"].values]
+        # NOTE: these are just a sequence
+        arr["feature"] = np.arange(arr["feature"].size, dtype=np.uint8)
+        # NOTE: numbers of features are given in the metadata, so could
+        # use that rather than check against zero here
         arr = xarray.where(arr == 0, np.nan, arr)
         arr.attrs = {}
 
-        products[grp + "s"] = arr
+        products[grp + "s"] = arr.T  # put depth/sample along the first axis
+    if drop_singular:
+        # drop variables which only have one value; these are typically 0, 1, nan or 'Default
+        products = products.drop_vars(
+            [
+                k
+                for k in products.data_vars
+                if products[k].dims == ("sample",)
+                and pd.unique(pd.Series(products[k])).size == 1
+            ]
+        )
+    if collapse_products:
+        systems = get_available_systems(products)
+        dropprod = []
+        for system in systems:
+            # NOTE: this will also drop error, NIL_Stat, SNR
+            dropprod += [k for k in products.data_vars if k.endswith(system)]
+            products[f"{system}_Grp"] = (
+                products_to_group_table(products, which=system)
+                .to_xarray()
+                .to_dataarray(f"{system}group")
+                .T
+            )
+            products[f"{system}_Min"] = (
+                products_to_mineral_table(products, which=system)
+                .to_xarray()
+                .to_dataarray(f"{system}mineral")
+                .T
+            )
+
+        products = products.drop_vars(dropprod)
     # convert traynames, otherwise occasionally converted to integers
-    products["Tray"] = products["Tray"].astype("<U16")
+    if "Tray" in products:
+        products["Tray"] = products["Tray"].astype("<U16")
     products = reorder_variables(products)
     return products
 
 
-def spectral_dataset_to_xarray(
-    spectra: pytsg.parse_tsg.Spectra,
+def open_tsg(  #
+    directory: str | Path,
+    image: bool = True,
     index_coord: str = "sample",
-    chunks: dict | int | None = None,
-) -> xarray.Dataset:
-    """
-    Load a TSG spectral subset into Xarray.
-
-    Parameters
-    ----------
-    spectra  : pytsg.parse_tsg.Spectra
-        TSG spectral dataset loaded with pytsg.
-    index_coord : str
-        Index coordinate to use for the dataset.
-        Using "depth" requires some post-processing and dropping duplicates.
-    chunks : int | dict
-        Chunking to use for the dataset.
-
-    Returns
-    -------
-    xarray.Dataset
-    """
-    _coords = coords_from_sampleheaders(spectra.sample_headers, spectra.wavelength)
-    _sample_coords = {
-        k: v
-        for k, v in _coords.items()
-        if k == "sample" or (isinstance(v, tuple) and v[0] == "sample")
-    }
-    # handle products
-    products = product_dataset_to_xarray(spectra.scalars, spectra.classes)
-    ###############################################################################s##
-    # add the spectra, and move it to the top of the variable list
-    spectra_da = xarray.DataArray(
-        spectra.spectra,
-        coords=_coords,
-        dims=("sample", "wavelength"),
-    )
-    if index_coord == "depth":
-        # have to do products first, otherwise spectra_da is changed
-        products = _reindex_depth(products, template=spectra_da)
-        spectra_da = _reindex_depth(spectra_da)
-
-    if chunks:
-        spectra_da = spectra_da.chunk(
-            chunks
-            if isinstance(chunks, int)
-            else {k: v for k, v in chunks.items() if k in spectra_da.dims}
-        )
-        products = products.chunk(
-            chunks
-            if isinstance(chunks, int)
-            else {k: v for k, v in chunks.items() if k in products.dims}
-        )
-
-    return products.assign_coords(_sample_coords).assign(Spectra=spectra_da)
-
-
-def tsg_to_xarray(
-    tsgdata,
-    index_coord: str = "sample",
-    chunks: dict | int | None = None,
-) -> xarray.DataTree:
-    """
-    Load an entire TSG dataset into Xarray.
-
-    Parameters
-    ----------
-    tsgdata  : pytsg.parse_tsg.TSG
-        TSG dataset loaded with pytsg.
-    index_coord : str
-        Index coordinate to use for the dataset.
-        Using "depth" requires some post-processing and dropping duplicates.
-    chunks : int | dict
-        Chunking to use for the dataset.
-
-    Returns
-    -------
-    xarray.DataTree
-        Data tree containing spectra and band headers.
-
-    Todo
-    -----
-    * Consider dropping Tray, Section, Depth (m) as they're duplicated as indexes.
-    * Consider dropping SecDist (mm), TraySamp, SecSamp and NumFeats - they can be calculated.
-    """
-    if chunks is None:
-        chunks = {}
-
-    DT = xarray.DataTree()
-
-    for subset in ["nir", "mir", "tir"]:
-        if hasattr(tsgdata, subset) and not inspect.isclass(getattr(tsgdata, subset)):
-            specds: xarray.Dataset = spectral_dataset_to_xarray(
-                getattr(tsgdata, subset), index_coord=index_coord, chunks=chunks
-            )
-            DT[subset.upper()] = xarray.DataTree.from_dict(
-                {
-                    "Spectra": specds["Spectra"].to_dataset(name="Spectra"),
-                    "Products": specds.drop_vars("Spectra").drop_dims("wavelength"),
-                }
-            )
-
-    #################################################################################
-    # add the lidar data, sort out indexing
-    if tsgdata.lidar is not None:
-        # the coordinates used here need to be the sample ones
-        prof_da = xarray.DataArray(tsgdata.lidar, dims=("sample",)).assign_coords(
-            {
-                k: v
-                for k, v in coords_from_sampleheaders(
-                    getattr(tsgdata, subset).sample_headers,
-                    getattr(tsgdata, subset).wavelength,
-                ).items()
-                if k == "sample" or (isinstance(v, tuple) and v[0] == "sample")
-            }
-        )
-        if index_coord == "depth":
-            prof_da = _reindex_depth(prof_da)
-        if chunks:
-            prof_da = prof_da.chunk(
-                chunks
-                if isinstance(chunks, int)
-                else {k: v for k, v in chunks.items() if k in prof_da.dims}
-            )
-        DT["Lidar"] = prof_da.chunk().to_dataset(name="Lidar")
-
-    return DT
-
-
-def open_tsg(
-    directory,
-    image=True,
-    index_coord="sample",
-    lazy=True,
-    chunks=None,
+    lazy: bool = True,
+    chunks: int | dict | None = None,
+    collapse_products: bool = False,
     **kwargs,
-):
+) -> xarray.DataTree:
     """
     Open a TSG dataset.
 
@@ -387,18 +315,25 @@ def open_tsg(
     ----------
     directory : str | pathlib.Path
         Directory of the TSG datset to load.
-    spectra : str
-        Which spectra to load by default, NIR or TIR.
     image : bool
         Whether to load the high-resolution RGB imagery.
     index_coord : str
         Index coordinate to use for the dataset.
         Using "depth" requires some post-processing and dropping duplicates.
+    lazy : bool
+        Whether to load the dataset lazily (default), or otherwise
+        load after the data structure is ready.
+    chunks : int | dict | None
+        Chunking specification for the dataset, if you're planning to
+        use `dask`.
+    collapse_products : bool
+        Whether to collapse products to a singular table per system,
+        rather than multiple e.g. Min1, Min2, ..
 
     Returns
     -------
-    xarray.Dataset
-        Dataset containing the spectra and associated data.
+    xarray.DataTree
+        DataTree containing the spectra and associated data.
     """
     directory = Path(directory)
 
@@ -408,14 +343,12 @@ def open_tsg(
     D = {}
     for f in spectral_bips:
         sset = SPECTRAL_MAPPING.get(f.stem.split("_")[-1])
-        ds = xarray.open_dataset(f, engine="tsg").drop_vars("half")
+        ds = xarray.open_dataset(
+            f, engine="tsg", collapse_products=collapse_products
+        ).drop_vars("half")
         if not lazy:
             ds = ds.load()
-        D = {
-            **D,
-            f"{sset}/Spectra": ds[["Spectra"]],
-            f"{sset}/Products": ds.drop_vars("Spectra"),
-        }
+        D = {**D, f"{sset}": ds}
     lidar = next(directory.glob("*tsg_hires.dat*"))
     if lidar:
         prof_da = xarray.DataArray(  # TODO: lazy loader?
@@ -439,16 +372,7 @@ def open_tsg(
 
     if index_coord == "depth":  # TODO: rechunk?
         for k in D:
-            if "Products" in k:
-                D[k] = _reindex_depth(D[k], template=D[f"{k.split('/')[0]}/Spectra"])
-                if chunks:
-                    D[k] = D[k].chunk(
-                        chunks
-                        if isinstance(chunks, int)
-                        else {k: v for k, v in chunks.items() if k in D[k].dims}
-                    )
-        for k in D:
-            if "Spectra" in k:
+            if "Spectra" in D[k].data_vars:
                 D[k] = _reindex_depth(D[k])
                 if chunks:
                     D[k] = D[k].chunk(
@@ -469,20 +393,10 @@ def open_tsg(
             image_ds = xarray.open_dataset(
                 crasfile, engine="lazycras" if lazy else "cras"
             )
-            section_depths = (
-                (
-                    ds.depth.groupby(["tray", "section"]).map(
-                        lambda x: xarray.Dataset({"min": x.min(), "max": x.max()})
-                    )
-                )
-                .stack(s=("tray", "section"))
-                .to_dataarray("metric")
-                .T.dropna(how="any", dim="s")
-                .values
-            )
-            depths = interpolate_section_depths(
-                section_depths, [t.nlines for t in image_ds.Image.attrs["section"]]
-            )
+            # NOTE: these uses the last spectral dataset accessed above
+            # this version hasn't yet been depth-reindexed!
+            depths = interpolate_section_depths(ds, image_ds.Image.attrs["section"])
+            # TODO: assign section-part IDs?
             _dx = dy = np.median(np.diff(depths[:200]))
             horizontal = np.arange(0, image_ds.Image.shape[1]) * dy
             horizontal -= horizontal.mean()
@@ -491,6 +405,7 @@ def open_tsg(
             )
 
             if index_coord == "depth":
+                # NOTE: width only appears here to make aspect-equal plotting easier - it's either pixel-pixel or depth-width
                 # there are no duplicate depths in the image, so we dont' need to deduplicate this
                 # TODO: assign sample-based coordinates as per depth ranges in the deduplicated sample spectra image
                 image_ds = (
