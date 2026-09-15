@@ -6,6 +6,11 @@ import pandas as pd
 import pytsg.parse_tsg
 import xarray
 
+from .products import (
+    get_available_systems,
+    products_to_group_table,
+    products_to_mineral_table,
+)
 from .util import Handle
 
 logger = Handle(__name__)
@@ -145,7 +150,11 @@ def reorder_variables(
             "Bound_Water",
             "Unbound_Water",
         ]
-    arrangement = [
+    arrangement = []
+    # these occur where collapse_products=True, if they're there put them first.
+    arrangement += sorted([v for v in ds.data_vars if "_Grp" in v or "_Min" in v])
+    # The first of these are e.g. coordinates and would typically get dropped
+    arrangement += [
         v
         for v in [
             "HoleID",
@@ -157,7 +166,7 @@ def reorder_variables(
             "Depths",
             "Widths",
         ]
-        if v in ds.data_vars
+        if v in ds.data_vars and v not in arrangement
     ]
 
     arrangement += [
@@ -209,12 +218,28 @@ def product_dataset_to_xarray(
     * Note that group is essentially redundant, could be a coordinate on mineral.
     """
     if drop_vars is None:
-        drop_vars = ["HoleID", "Date", "Depth (m)", "Tray", "Section"]
+        drop_vars = [
+            "HoleID",
+            "Date",
+            "Depth (m)",
+            "Tray",
+            "Section",
+            "NumFeats",
+            "SecDist (mm)",
+            "SecSamp",
+            "TraySamp",
+        ]
     scalar_data = scalars.copy()  # pd.DataFrame
     if drop_vars:
         scalar_data = scalar_data.drop(
             columns=[v for v in drop_vars if v in scalar_data.columns]
         )
+        # some of the dropped variables are classes, which might also have colormaps
+        scalar_data.attrs = {
+            k: v
+            for k, v in scalar_data.attrs.items()
+            if ((k not in drop_vars) and (k.replace("_Colors", "") not in drop_vars))
+        }
     # could drop emtpy columns but is unlikely to be many
     scalar_data.index.name = "sample"
     products = scalar_data.to_xarray()
@@ -228,21 +253,45 @@ def product_dataset_to_xarray(
         products = products[
             [v for v in products.data_vars if v not in arr.coords["feature"]]
         ]
-        arr["feature"] = [f.replace(grp, "") for f in arr["feature"].values]
+        # # [f.replace(grp, "") for f in arr["feature"].values]
+        # NOTE: these are just a sequence
+        arr["feature"] = np.arange(arr["feature"].size, dtype=np.uint8)
+        # NOTE: numbers of features are given in the metadata, so could
+        # use that rather than check against zero here
         arr = xarray.where(arr == 0, np.nan, arr)
         arr.attrs = {}
 
-        products[grp + "s"] = arr
+        products[grp + "s"] = arr.T  # put depth/sample along the first axis
     if drop_singular:
         # drop variables which only have one value; these are typically 0, 1, nan or 'Default
         products = products.drop_vars(
             [
                 k
                 for k in products.data_vars
-                if products[k].dims == ("depth",)
+                if products[k].dims == ("sample",)
                 and pd.unique(pd.Series(products[k])).size == 1
             ]
         )
+    if collapse_products:
+        systems = get_available_systems(products)
+        dropprod = []
+        for system in systems:
+            # NOTE: this will also drop error, NIL_Stat, SNR
+            dropprod += [k for k in products.data_vars if k.endswith(system)]
+            products[f"{system}_Grp"] = (
+                products_to_group_table(products, which=system)
+                .to_xarray()
+                .to_dataarray(f"{system}group")
+                .T
+            )
+            products[f"{system}_Min"] = (
+                products_to_mineral_table(products, which=system)
+                .to_xarray()
+                .to_dataarray(f"{system}mineral")
+                .T
+            )
+
+        products = products.drop_vars(dropprod)
     # convert traynames, otherwise occasionally converted to integers
     if "Tray" in products:
         products["Tray"] = products["Tray"].astype("<U16")
@@ -250,12 +299,13 @@ def product_dataset_to_xarray(
     return products
 
 
-def open_tsg(
+def open_tsg(  #
     directory: str | Path,
     image: bool = True,
     index_coord: str = "sample",
     lazy: bool = True,
     chunks: int | dict | None = None,
+    collapse_products: bool = False,
     **kwargs,
 ) -> xarray.DataTree:
     """
@@ -276,6 +326,9 @@ def open_tsg(
     chunks : int | dict | None
         Chunking specification for the dataset, if you're planning to
         use `dask`.
+    collapse_products : bool
+        Whether to collapse products to a singular table per system,
+        rather than multiple e.g. Min1, Min2, ..
 
     Returns
     -------
@@ -290,7 +343,9 @@ def open_tsg(
     D = {}
     for f in spectral_bips:
         sset = SPECTRAL_MAPPING.get(f.stem.split("_")[-1])
-        ds = xarray.open_dataset(f, engine="tsg").drop_vars("half")
+        ds = xarray.open_dataset(
+            f, engine="tsg", collapse_products=collapse_products
+        ).drop_vars("half")
         if not lazy:
             ds = ds.load()
         D = {**D, f"{sset}": ds}

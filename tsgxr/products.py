@@ -1,3 +1,5 @@
+import re
+
 import matplotlib.axes
 import matplotlib.pyplot as plt
 import numpy as np
@@ -34,7 +36,8 @@ def get_system_subset_attrs(ds: xarray.Dataset, which: str, level=None) -> tuple
     ds : xarray.Dataset
         Dataset to get attributes from.
     which : str
-        Which system to get attributes for.
+        Which system to get attributes for. e.g. one of
+        'uTSAS', 'uTSAV', 'sTSAS', 'sTSAV', 'uTSAT', 'sTSAT'.
     level : str
         The level to subset attibutes to (either 'Mineral' or 'Groups').
 
@@ -42,18 +45,22 @@ def get_system_subset_attrs(ds: xarray.Dataset, which: str, level=None) -> tuple
     -------
     tuple
     """
+    key0 = re.compile(rf"{which[1:-1].upper()}[0-9]+_{which[-1].upper()}")
+    # TODO: check if there's independent user and system variables, or just one set?
     items = [
         k
         for k in ds.attrs
         if (
-            k.upper().startswith(f"{which[0]}".upper())
-            and (
-                which[1:-1].upper() in k.upper()
-            )  # e.g. sTSAS needs to strip the last letter
-            and (
-                ("SWIR_TSA" in k.upper())
-                if "TSAS" in which
-                else (("VNIR_TSA" in k.upper()) if "TSAV" in which.upper() else True)
+            re.match(key0, k)  # [s/u]TSAS -> TSA704_S
+            or (  # e.g. U_SWIR_TSA705
+                k.upper().startswith(which[0].upper())
+                and (
+                    ("SWIR_TSA" in k.upper())
+                    if "TSAS" in which
+                    else (
+                        ("VNIR_TSA" in k.upper()) if "TSAV" in which.upper() else True
+                    )
+                )
             )
         )
     ]
@@ -128,7 +135,8 @@ def _product_summary_table(
     ]  # sort order of columns
     df.name = f"sTSA{which}{'Groups' if level == 'Grp' else 'Minerals'}"
     df.columns.name = None
-    df.columns.name = next(iter(ds.dims))
+    df.index.name = next(iter(ds.dims))
+    df.columns.name = "{which}group" if level == "Grp" else "{which}mineral"
     return df.where(df > 0).dropna(how="all", axis=1)
 
 

@@ -119,6 +119,7 @@ def parse_scalars(
             if (getattr(ch, "colors", None) is not None)
         }
     )
+
     if "Final Mask" in df.columns:
         df["Final Mask"] = df["Final Mask"].astype(np.uint8)
     return df
@@ -307,6 +308,8 @@ class TSGBIPBackend(xarray.backends.BackendEntrypoint):
         ds = product_data.assign(
             Spectra=da[0].where(lambda x: ~np.isclose(x, np.finfo(np.float32).min))
         )
+        # insert spectra at the top
+        ds = ds[["Spectra"] + [v for v in ds.data_vars if v != "Spectra"]]
         # all of the useful information from the band headers, sample headers,
         # class headers is incorporated already
         ds.attrs.update(
