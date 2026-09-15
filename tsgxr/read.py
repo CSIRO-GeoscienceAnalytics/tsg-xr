@@ -29,7 +29,7 @@ def interpolate_section_depths(
     Returns
     -------
     numpy.ndarray (nsamples, )
-        Interpoalted within-section depths.
+        Interpolated within-section depths.
     """
 
     idx = pd.MultiIndex.from_arrays(
@@ -99,11 +99,9 @@ def _reindex_depth(
     if template is None:
         template = da
     fltr = pd.Series(template.depth).duplicated().values
-    template = template.sel(sample=~fltr)
-    sortidx = np.argsort(template.depth.values)
     return (
         da.sel(sample=~fltr)
-        .isel(sample=sortidx)
+        .isel(sample=np.argsort(template.sel(sample=~fltr).depth.values))
         .swap_dims({"sample": "depth"})
         .sortby("depth")
     )
