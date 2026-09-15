@@ -327,6 +327,7 @@ def open_tsg(
             )
 
             if index_coord == "depth":
+                # NOTE: width only appears here to make aspect-equal plotting easier - it's either pixel-pixel or depth-width
                 # there are no duplicate depths in the image, so we dont' need to deduplicate this
                 # TODO: assign sample-based coordinates as per depth ranges in the deduplicated sample spectra image
                 image_ds = (
