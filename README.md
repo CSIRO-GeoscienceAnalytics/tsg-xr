@@ -319,7 +319,7 @@ given here):
 
 ```python
 %timeit open_tsg(hyloggerdir, image=True) # lazy tsg-xr
-11.4 s ± 108 ms per loop (mean ± std. dev. of 7 runs, 1 loop each)
+10.2 s ± 71.9 ms per loop (mean ± std. dev. of 7 runs, 1 loop each)
 ```
 
 Reading a TSG spectral dataset:
