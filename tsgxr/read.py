@@ -182,6 +182,8 @@ def reorder_variables(
 def product_dataset_to_xarray(
     scalars: pd.DataFrame,
     collapse_products: bool = False,
+    drop_vars=None,
+    drop_singular=True,
 ) -> xarray.Dataset:
     """
     Transform a set of spectral products/scalars into xarray.align
@@ -193,6 +195,10 @@ def product_dataset_to_xarray(
     collapse_products : bool
         Whether to collapse products to a singular table per system,
         rather than multiple e.g. Min1, Min2, ..
+    drop_vars : list
+        List of variables to drop, typically due to being duplicated as coordinates.
+    drop_singular : bool
+        Whether to drop singular values which are propagated across the products.
 
     Returns
     -------
@@ -202,7 +208,13 @@ def product_dataset_to_xarray(
     -----
     * Note that group is essentially redundant, could be a coordinate on mineral.
     """
+    if drop_vars is None:
+        drop_vars = ["HoleID", "Date", "Depth (m)", "Tray", "Section"]
     scalar_data = scalars.copy()  # pd.DataFrame
+    if drop_vars:
+        scalar_data = scalar_data.drop(
+            columns=[v for v in drop_vars if v in scalar_data.columns]
+        )
     # could drop emtpy columns but is unlikely to be many
     scalar_data.index.name = "sample"
     products = scalar_data.to_xarray()
@@ -221,8 +233,19 @@ def product_dataset_to_xarray(
         arr.attrs = {}
 
         products[grp + "s"] = arr
+    if drop_singular:
+        # drop variables which only have one value; these are typically 0, 1, nan or 'Default
+        products = products.drop_vars(
+            [
+                k
+                for k in products.data_vars
+                if products[k].dims == ("depth",)
+                and pd.unique(pd.Series(products[k])).size == 1
+            ]
+        )
     # convert traynames, otherwise occasionally converted to integers
-    products["Tray"] = products["Tray"].astype("<U16")
+    if "Tray" in products:
+        products["Tray"] = products["Tray"].astype("<U16")
     products = reorder_variables(products)
     return products
 
