@@ -224,6 +224,12 @@ def unstack_arbitrary_feature_data(ds: xarray.Dataset, dtype=np.half) -> xarray.
     Returns
     -------
     xarray.Dataset
+
+    Todo
+    ----
+    * Consider if there's an efficient intermediate form other than the sparse image
+      with meaningful coordinates - e.g. long-form features multi-indexed based on depth,
+      wavelength.
     """
     idx = "depth" if ("depth" in ds.dims) else "sample"
     complement = "sample" if idx == "depth" else "depth"

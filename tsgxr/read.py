@@ -14,18 +14,17 @@ SPECTRAL_MAPPING = {"tsg": "NIR", "tir": "TIR", "mir": "MIR"}
 
 
 def interpolate_section_depths(
-    section_depths: np.ndarray,
-    ninterp: int | np.ndarray,
+    template: xarray.DataArray | xarray.Dataset, sections: np.rec.recarray
 ) -> np.ndarray:
     """
     Interpolate section depths based on a number of interpolated samples.
 
     Parameters
     ----------
-    section_depths : numpy.ndarray (n_sections, 2)
-        Array containing the minimum and maximum depths of each section.
-    ninterp : int | numpy.ndarray (n_sections)
-        Either a constant number of divisions or a number of divisions per section.
+    template: xarray.DataArray | xarray.Dataset
+        Data structure containing the requisite tray, section and depth coordinates.
+    sections : np.rec.recarray
+        Record array containing the 'nlines' information per-section.
 
     Returns
     -------
@@ -33,15 +32,42 @@ def interpolate_section_depths(
         Interpoalted within-section depths.
     """
 
-    assert isinstance(ninterp, (int, np.ndarray, list))
-    if isinstance(ninterp, int):
-        ninterp = np.ones(section_depths.shape[0]) * ninterp
-    else:
-        ninterp = np.array(ninterp)
-        assert ninterp.dtype.kind in ["i", "u"]
-    return np.hstack(
-        [np.linspace(mn, mx, nint) for (nint, (mn, mx)) in zip(ninterp, section_depths)]
+    idx = pd.MultiIndex.from_arrays(
+        [template.tray.values, template.section.values], names=["tray", "section"]
     )
+    section_depths = (
+        pd.Series(template.depth.values).groupby(idx).agg(["min", "max"]).to_xarray()
+    )
+    section_depths["index"] = pd.MultiIndex.from_arrays(
+        np.array(list(section_depths["index"].values)).T, names=["tray", "section"]
+    )
+
+    assert len(sections) == len(section_depths["min"]), (
+        f"Length of sections record array ({len(sections)}) doesn't match the depth metadata ({len(section_depths['min'])})."
+    )
+
+    if (sections["nlines"] == sections["nlines"][0]).all():
+        # all have the same number of lines
+        section_depth_interp = (
+            np.linspace(0, 1, sections["nlines"][0], dtype=section_depths["max"].dtype)[
+                None, :
+            ]
+            * (section_depths["max"] - section_depths["min"]).values[:, None]
+            + section_depths["min"].values[:, None]
+        ).ravel()
+    else:
+        section_depth_interp = np.hstack(
+            [
+                np.linspace(mn, mx, nint, dtype=section_depths["max"].dtype)
+                for (mn, mx, nint) in zip(
+                    section_depths["min"].values,
+                    section_depths["max"].values,
+                    sections["nlines"],
+                    strict=True,
+                )
+            ]
+        )
+    return section_depth_interp
 
 
 def _reindex_depth(
@@ -291,20 +317,10 @@ def open_tsg(
             image_ds = xarray.open_dataset(
                 crasfile, engine="lazycras" if lazy else "cras"
             )
-            section_depths = (
-                (
-                    ds.depth.groupby(["tray", "section"]).map(
-                        lambda x: xarray.Dataset({"min": x.min(), "max": x.max()})
-                    )
-                )
-                .stack(s=("tray", "section"))
-                .to_dataarray("metric")
-                .T.dropna(how="any", dim="s")
-                .values
-            )
-            depths = interpolate_section_depths(
-                section_depths, [t.nlines for t in image_ds.Image.attrs["section"]]
-            )
+            # NOTE: these uses the last spectral dataset accessed above
+            # this version hasn't yet been depth-reindexed!
+            depths = interpolate_section_depths(ds, image_ds.Image.attrs["section"])
+            # TODO: assign section-part IDs?
             _dx = dy = np.median(np.diff(depths[:200]))
             horizontal = np.arange(0, image_ds.Image.shape[1]) * dy
             horizontal -= horizontal.mean()

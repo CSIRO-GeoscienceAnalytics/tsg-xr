@@ -145,7 +145,7 @@ def coords_from_sampleheaders(headers: pd.DataFrame, wavelengths: np.ndarray) ->
             "sample": "sample",
             "T": "tray",
             "L": "section",
-            "P": "section-part",
+            "P": "section-part",  # NOTE: this is simply a range within the section
             "D": "depth",
             "X": "section-position",
             "H": "hole",

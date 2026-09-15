@@ -280,13 +280,13 @@ Loading the dataset *with an image*:
 
 ```python
 %timeit open_tsg(hyloggerdir, image=True, lazy=False) # tsg-xr
-5.24 s ± 1.39 s per loop (mean ± std. dev. of 7 runs, 1 loop each)
+4.21 s ± 539 ms per loop (mean ± std. dev. of 7 runs, 1 loop each)
 
 %timeit open_tsg(hyloggerdir, image=True) # lazy tsg-xr
-1.06 s ± 36.3 ms per loop (mean ± std. dev. of 7 runs, 1 loop each)
+1.03 s ± 51.7 ms per loop (mean ± std. dev. of 7 runs, 1 loop each)
 
 %timeit read_package(hyloggerdir, read_cras_file=True) # pytsg
-9.72 s ± 443 ms per loop (mean ± std. dev. of 7 runs, 1 loop each)
+9.08 s ± 193 ms per loop (mean ± std. dev. of 7 runs, 1 loop each)
 ```
 
 Reading a TSG spectral dataset:
