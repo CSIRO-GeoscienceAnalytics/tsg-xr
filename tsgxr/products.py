@@ -97,7 +97,16 @@ def _product_summary_table(
     pandas.DataFrame
         Dataframe with minerals or groups as columns.
     """
+
     level = "Grp" if level.upper().startswith("G") else "Min"
+    if f"{which}_{level}" in ds:  # i.e., this table is already compiled
+        k = f"{which}_{level}"
+        return (
+            ds[k]
+            .drop_vars([v for v in ds[k].coords if v not in ds[k].dims])
+            .to_dataset(ds[k].dims[1])
+            .to_dataframe()
+        )
     grps = {  # get the groups which correspond to 'which' and 'level'
         ix + 1: v
         for ix, v in enumerate(
