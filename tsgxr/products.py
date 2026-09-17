@@ -24,7 +24,20 @@ def get_available_systems(ds: xarray.Dataset) -> set:
     -------
     set
     """
-    return {v.split(" ")[1] for v in ds.data_vars if "Grp1" in v or "Min1" in v}
+    grp = re.compile(r"(?:(?:Grp|Min)[0-9]+\s[a-zA-Z]+|_(?:Grp|Min)$)", re.DOTALL)
+    return sorted(
+        {
+            (
+                v.split(" ")[1]  # original e.g. 'Min1 sTSAS'
+                if " " in v
+                else v.split("_")[0]
+            )  # processed eg 'sTSAS_Grp'
+            for v in ds.data_vars
+            if re.search(grp, v)
+        },
+        key=lambda x: x[::-1],
+        reverse=True,
+    )
 
 
 def get_system_subset_attrs(ds: xarray.Dataset, which: str, level=None) -> tuple:
@@ -127,9 +140,6 @@ def _product_summary_table(
             .fillna(0)
         )
 
-    df = (sum([_get_wideform(ix, g) for ix, g in grps.items()])).set_index(
-        ds.depth.values if "depth" in ds.indexes else ds.sample.values
-    )
     class_key = next(
         iter(
             [
@@ -139,9 +149,15 @@ def _product_summary_table(
             ]
         )
     )
-    df = df[
-        [c for c in ds.attrs[class_key] if (c in df.columns)]
-    ]  # sort order of columns
+    idx, cl = (
+        ds.depth.values if "depth" in ds.indexes else ds.sample.values,
+        ds.attrs[class_key],
+    )
+    df = pd.DataFrame(np.zeros((idx.size, len(cl))), columns=cl, index=idx)
+    for ix, g in grps.items():
+        df += _get_wideform(ix, g)
+
+    df = df.dropna(how="all", axis=0)
     df.name = f"sTSA{which}{'Groups' if level == 'Grp' else 'Minerals'}"
     df.columns.name = None
     df.index.name = next(iter(ds.dims))
