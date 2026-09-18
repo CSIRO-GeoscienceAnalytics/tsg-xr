@@ -1,4 +1,5 @@
 import re
+from collections.abc import Callable
 
 import matplotlib.axes
 import matplotlib.pyplot as plt
@@ -87,11 +88,53 @@ def get_system_subset_attrs(ds: xarray.Dataset, which: str, level=None) -> tuple
     return tuple(items)
 
 
+def composite(
+    df: pd.DataFrame,
+    step: float | None = None,
+    agg: Callable | None = None,
+) -> pd.DataFrame:
+    """
+
+    Parameters
+    -----------
+    df : pandas.DataFrame
+        Dataframe to generate a composite of.
+    step : float
+        Step to use for compositing, if any. In metres where the
+        dataset supplied is indexed by depth (any step > 0.02 makes sense),
+        else in sample numbers (i.e. you want to use a step >= 2).
+    agg : Callable
+        Callable function to use for aggregation.
+
+    Returns
+    -------
+    pandas.DataFrame
+    """
+    if agg is None:
+        agg = lambda x: np.nansum(x) / len(x)
+    nsteps = (df.index.values[-1] - df.index.values[0]) // step + 1
+    df = df.groupby(
+        pd.cut(df.index, df.index.values[0] + np.arange(nsteps) * step),
+        observed=False,
+    ).agg(agg)
+    df.index = df.index.map(
+        dict(
+            zip(
+                df.index.categories,
+                df.index.categories.map(lambda c: (c.left + c.right) / 2),
+            )
+        )
+    ).values
+    return df
+
+
 def _product_summary_table(
     ds: xarray.Dataset,
     which: str,
     level: str = "Grp",
     dropna: bool = True,
+    step: float | None = None,
+    agg: Callable | None = None,
 ) -> pd.DataFrame:
     """
     Summarize a TSG scalar/product table, aggregating the long-form
@@ -107,6 +150,12 @@ def _product_summary_table(
         Whether to summarize at 'Grp' or 'Min' level.
     dropna : bool
         Whether to drop empty columns.
+    step : float
+        Step to use for compositing, if any. In metres where the
+        dataset supplied is indexed by depth (any step > 0.02 makes sense),
+        else in sample numbers (i.e. you want to use a step >= 2).
+    agg : Callable
+        Callable function to use for aggregation, where step is not None.
 
     Returns
     -------
@@ -160,12 +209,18 @@ def _product_summary_table(
             # this wasn't working because of the depth indexing?
             df += _get_wideform(ix, g).reindex(columns=cl).values
 
+    df = df.where(df > 0)
+
+    if dropna:
+        df = df.dropna(how="all", axis=1)
+
+    if step is not None:
+        df = composite(df, step=step, agg=agg)
+
     df.name = f"sTSA{which}{'Groups' if level == 'Grp' else 'Minerals'}"
     df.index.name = "sample" if "sample" in ds.dims else "depth"
     df.columns.name = f"{which}group" if level == "Grp" else f"{which}mineral"
-    df = df.where(df > 0)
-    if dropna:
-        df = df.dropna(how="all", axis=1)
+    df.attrs["colormap"] = get_product_colormap(ds, which=which, level=level)
     return df
 
 
@@ -317,6 +372,7 @@ def plot_product_downhole(
     which: str,
     level: str = "Grp",
     step: float | None = None,
+    agg: Callable | None = None,
     ax: matplotlib.axes.Axes | None = None,
     invert: bool = True,
 ):
@@ -346,22 +402,10 @@ def plot_product_downhole(
     -------
     matplotlib.axes.Axes
     """
-    products = _product_summary_table(ds, which=which, level=level)
-    colormap = get_product_colormap(ds, which=which, level=level)
-    if step is not None:
-        nsteps = (products.index.values[-1] - products.index.values[0]) // step + 1
-        products = products.groupby(
-            pd.cut(products.index, products.index.values[0] + np.arange(nsteps) * step),
-            observed=False,
-        ).agg(lambda x: np.nansum(x) / len(x))
-        products.index = products.index.map(
-            dict(
-                zip(
-                    products.index.categories,
-                    products.index.categories.map(lambda c: (c.left + c.right) / 2),
-                )
-            )
-        ).values
+    products = _product_summary_table(ds, which=which, level=level, step=step, agg=agg)
+    colormap = products.attrs.get(
+        "colormap", get_product_colormap(ds, which=which, level=level)
+    )
 
     if ax is None:
         _fig, ax = plt.subplots(1, figsize=(6, 15))
