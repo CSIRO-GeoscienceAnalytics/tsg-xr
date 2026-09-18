@@ -301,7 +301,7 @@ class TSGBIPBackend(xarray.backends.BackendEntrypoint):
                 **backend_array.coords,
                 "half": np.arange(2),
                 "sample": np.arange(
-                    0, backend_array.info["coordinates"]["lastsample"], dtype="uint64"
+                    0, backend_array.info["coordinates"]["lastsample"], dtype="uint32"
                 ),
                 "wavelength": backend_array.wavelength,
                 "band": ("wavelength", np.arange(backend_array.wavelength.size)),
