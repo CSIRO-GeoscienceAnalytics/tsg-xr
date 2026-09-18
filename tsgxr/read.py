@@ -289,7 +289,6 @@ def product_dataset_to_xarray(
                 .to_dataarray(f"{system}mineral")
                 .T
             )
-
         products = products.drop_vars(dropprod)
     # convert traynames, otherwise occasionally converted to integers
     if "Tray" in products:

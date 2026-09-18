@@ -91,6 +91,7 @@ def _product_summary_table(
     ds: xarray.Dataset,
     which: str,
     level: str = "Grp",
+    dropna: bool = True,
 ) -> pd.DataFrame:
     """
     Summarize a TSG scalar/product table, aggregating the long-form
@@ -104,6 +105,8 @@ def _product_summary_table(
         Which subset to look at (e.g. S or V for NIR, T for TIR).
     level : str
         Whether to summarize at 'Grp' or 'Min' level.
+    dropna : bool
+        Whether to drop empty columns.
 
     Returns
     -------
@@ -114,58 +117,63 @@ def _product_summary_table(
     level = "Grp" if level.upper().startswith("G") else "Min"
     if f"{which}_{level}" in ds:  # i.e., this table is already compiled
         k = f"{which}_{level}"
-        return (
+        labelvar = next(k for k in ds[k].dims if k not in ["depth", "sample"])
+        df = (
             ds[k]
             .drop_vars([v for v in ds[k].coords if v not in ds[k].dims])
-            .to_dataset(ds[k].dims[1])
+            .to_dataset(labelvar)
             .to_dataframe()
         )
-    grps = {  # get the groups which correspond to 'which' and 'level'
-        ix + 1: v
-        for ix, v in enumerate(
-            [
-                v.split(" ")[0]
-                for v in ds.data_vars
-                if (v.startswith(level) and v.endswith(f"{which}"))
-            ]
-        )
-    }
+    else:
+        grps = {  # get the groups which correspond to 'which' and 'level'
+            ix + 1: v
+            for ix, v in enumerate(
+                [
+                    v.split(" ")[0]
+                    for v in ds.data_vars
+                    if (v.startswith(level) and v.endswith(f"{which}"))
+                ]
+            )
+        }
 
-    def _get_wideform(ix, g):
-        return (
-            ds[[f"{g} {which}", f"Wt{ix} {which}"]]
-            .to_dataframe()
-            .reset_index(drop=True)
-            .pivot(columns=f"{g} {which}", values=f"Wt{ix} {which}")
-            .fillna(0)
-        )
+        def _get_wideform(ix, g):
+            return (
+                ds[[f"{g} {which}", f"Wt{ix} {which}"]]
+                .to_dataframe()
+                .reset_index(drop=True)
+                .pivot(columns=f"{g} {which}", values=f"Wt{ix} {which}")
+                .fillna(0)
+            )
 
-    class_key = next(
-        iter(
-            [
-                k
-                for k in get_system_subset_attrs(ds, which=which, level=level)
-                if "Colors" not in k
-            ]
+        classattrs = [
+            k
+            for k in get_system_subset_attrs(ds, which=which, level=level)
+            if "Colors" not in k
+        ]
+        class_key = next(iter(classattrs))
+        idx, cl = (
+            ds.depth.values if "depth" in ds.indexes else ds.sample.values,
+            ds.attrs[class_key],
         )
-    )
-    idx, cl = (
-        ds.depth.values if "depth" in ds.indexes else ds.sample.values,
-        ds.attrs[class_key],
-    )
-    df = pd.DataFrame(np.zeros((idx.size, len(cl))), columns=cl, index=idx)
-    for ix, g in grps.items():
-        df += _get_wideform(ix, g)
+        df = pd.DataFrame(np.zeros((idx.size, len(cl))), columns=cl, index=idx)
+        for ix, g in grps.items():
+            # this wasn't working because of the depth indexing?
+            df += _get_wideform(ix, g).reindex(columns=cl).values
 
-    df = df.dropna(how="all", axis=0)
     df.name = f"sTSA{which}{'Groups' if level == 'Grp' else 'Minerals'}"
-    df.columns.name = None
-    df.index.name = next(iter(ds.dims))
-    df.columns.name = "{which}group" if level == "Grp" else "{which}mineral"
-    return df.where(df > 0).dropna(how="all", axis=1)
+    df.index.name = "sample" if "sample" in ds.dims else "depth"
+    df.columns.name = f"{which}group" if level == "Grp" else f"{which}mineral"
+    df = df.where(df > 0)
+    if dropna:
+        df = df.dropna(how="all", axis=1)
+    return df
 
 
-def products_to_group_table(ds: xarray.Dataset, which: str = "sTSAS") -> pd.DataFrame:
+def products_to_group_table(
+    ds: xarray.Dataset,
+    which: str = "sTSAS",
+    **kwargs,
+) -> pd.DataFrame:
     """
     Summarize a TSG scalar/product table, aggregating the long-form
     used in TSG to a full table.
@@ -182,10 +190,14 @@ def products_to_group_table(ds: xarray.Dataset, which: str = "sTSAS") -> pd.Data
     pandas.DataFrame
         Dataframe with groups as columns.
     """
-    return _product_summary_table(ds, which, level="Grp")
+    return _product_summary_table(ds, which, level="Grp", **kwargs)
 
 
-def products_to_mineral_table(ds: xarray.Dataset, which: str = "sTSAS") -> pd.DataFrame:
+def products_to_mineral_table(
+    ds: xarray.Dataset,
+    which: str = "sTSAS",
+    **kwargs,
+) -> pd.DataFrame:
     """
     Summarize a TSG scalar/product table, aggregating the long-form
     used in TSG to a full table.
@@ -202,7 +214,7 @@ def products_to_mineral_table(ds: xarray.Dataset, which: str = "sTSAS") -> pd.Da
     pandas.DataFrame
         Dataframe with minerals as columns.
     """
-    return _product_summary_table(ds, which, level="Min")
+    return _product_summary_table(ds, which, level="Min", **kwargs)
 
 
 def get_product_colormap(
