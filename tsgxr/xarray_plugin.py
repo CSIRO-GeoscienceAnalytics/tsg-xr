@@ -125,14 +125,23 @@ def parse_scalars(
     return df
 
 
-def coords_from_sampleheaders(headers: pd.DataFrame, wavelengths: np.ndarray) -> dict:
+def coords_from_sampleheaders(
+    headers: pd.DataFrame,
+    wavelengths: np.ndarray,
+    drop_offset_indexes=True,
+) -> dict:
     """
     Turn the sample headers of a TSG spectral subset into coordinates.
 
     Parameters
     ----------
-    spectraldata  : pytsg.parse_tsg.Spectra
-        Spectral subset loaded with pytsg.
+    headers  : pandas.DataFrame
+        Spectral headers loaded with pytsg.
+    wavelengths : numpy.ndarray
+        Wavelengths for the spectral array.
+    drop_offset_indexes : bool
+        Whether to drop offset indexes (section-position, section-part)
+        which are simply ranges from the start of each section.
 
     Returns
     -------
@@ -146,12 +155,15 @@ def coords_from_sampleheaders(headers: pd.DataFrame, wavelengths: np.ndarray) ->
             "sample": "sample",
             "T": "tray",
             "L": "section",
-            "P": "section-part",  # NOTE: this is simply a range within the section
+            "P": "section-part",
             "D": "depth",
             "X": "section-position",
             "H": "hole",
         }
     )
+    if drop_offset_indexes:
+        # NOTE: this is simply a range/depth-range within the section
+        sampleheaders = sampleheaders.drop(columns=["section-part", "section-position"])
     # note that depths can be duplicated, so would need to be
     # post-processed to be used as an index
     coords = {
@@ -289,7 +301,7 @@ class TSGBIPBackend(xarray.backends.BackendEntrypoint):
                 **backend_array.coords,
                 "half": np.arange(2),
                 "sample": np.arange(
-                    0, backend_array.info["coordinates"]["lastsample"], dtype="uint64"
+                    0, backend_array.info["coordinates"]["lastsample"], dtype="uint32"
                 ),
                 "wavelength": backend_array.wavelength,
                 "band": ("wavelength", np.arange(backend_array.wavelength.size)),

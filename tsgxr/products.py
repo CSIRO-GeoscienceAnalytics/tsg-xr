@@ -1,4 +1,5 @@
 import re
+from collections.abc import Callable
 
 import matplotlib.axes
 import matplotlib.pyplot as plt
@@ -24,7 +25,20 @@ def get_available_systems(ds: xarray.Dataset) -> set:
     -------
     set
     """
-    return {v.split(" ")[1] for v in ds.data_vars if "Grp1" in v or "Min1" in v}
+    grp = re.compile(r"(?:(?:Grp|Min)[0-9]+\s[a-zA-Z]+|_(?:Grp|Min)$)", re.DOTALL)
+    return sorted(
+        {
+            (
+                v.split(" ")[1]  # original e.g. 'Min1 sTSAS'
+                if " " in v
+                else v.split("_")[0]
+            )  # processed eg 'sTSAS_Grp'
+            for v in ds.data_vars
+            if re.search(grp, v)
+        },
+        key=lambda x: x[::-1],
+        reverse=True,
+    )
 
 
 def get_system_subset_attrs(ds: xarray.Dataset, which: str, level=None) -> tuple:
@@ -74,10 +88,53 @@ def get_system_subset_attrs(ds: xarray.Dataset, which: str, level=None) -> tuple
     return tuple(items)
 
 
+def composite(
+    df: pd.DataFrame,
+    step: float | None = None,
+    agg: Callable | None = None,
+) -> pd.DataFrame:
+    """
+
+    Parameters
+    -----------
+    df : pandas.DataFrame
+        Dataframe to generate a composite of.
+    step : float
+        Step to use for compositing, if any. In metres where the
+        dataset supplied is indexed by depth (any step > 0.02 makes sense),
+        else in sample numbers (i.e. you want to use a step >= 2).
+    agg : Callable
+        Callable function to use for aggregation.
+
+    Returns
+    -------
+    pandas.DataFrame
+    """
+    if agg is None:
+        agg = lambda x: np.nansum(x) / len(x)
+    nsteps = (df.index.values[-1] - df.index.values[0]) // step + 1
+    df = df.groupby(
+        pd.cut(df.index, df.index.values[0] + np.arange(nsteps) * step),
+        observed=False,
+    ).agg(agg)
+    df.index = df.index.map(
+        dict(
+            zip(
+                df.index.categories,
+                df.index.categories.map(lambda c: (c.left + c.right) / 2),
+            )
+        )
+    ).values
+    return df
+
+
 def _product_summary_table(
     ds: xarray.Dataset,
     which: str,
     level: str = "Grp",
+    dropna: bool = True,
+    step: float | None = None,
+    agg: Callable | None = None,
 ) -> pd.DataFrame:
     """
     Summarize a TSG scalar/product table, aggregating the long-form
@@ -91,6 +148,14 @@ def _product_summary_table(
         Which subset to look at (e.g. S or V for NIR, T for TIR).
     level : str
         Whether to summarize at 'Grp' or 'Min' level.
+    dropna : bool
+        Whether to drop empty columns.
+    step : float
+        Step to use for compositing, if any. In metres where the
+        dataset supplied is indexed by depth (any step > 0.02 makes sense),
+        else in sample numbers (i.e. you want to use a step >= 2).
+    agg : Callable
+        Callable function to use for aggregation, where step is not None.
 
     Returns
     -------
@@ -101,55 +166,69 @@ def _product_summary_table(
     level = "Grp" if level.upper().startswith("G") else "Min"
     if f"{which}_{level}" in ds:  # i.e., this table is already compiled
         k = f"{which}_{level}"
-        return (
+        labelvar = next(k for k in ds[k].dims if k not in ["depth", "sample"])
+        df = (
             ds[k]
             .drop_vars([v for v in ds[k].coords if v not in ds[k].dims])
-            .to_dataset(ds[k].dims[1])
+            .to_dataset(labelvar)
             .to_dataframe()
         )
-    grps = {  # get the groups which correspond to 'which' and 'level'
-        ix + 1: v
-        for ix, v in enumerate(
-            [
-                v.split(" ")[0]
-                for v in ds.data_vars
-                if (v.startswith(level) and v.endswith(f"{which}"))
-            ]
-        )
-    }
+    else:
+        grps = {  # get the groups which correspond to 'which' and 'level'
+            ix + 1: v
+            for ix, v in enumerate(
+                [
+                    v.split(" ")[0]
+                    for v in ds.data_vars
+                    if (v.startswith(level) and v.endswith(f"{which}"))
+                ]
+            )
+        }
 
-    def _get_wideform(ix, g):
-        return (
-            ds[[f"{g} {which}", f"Wt{ix} {which}"]]
-            .to_dataframe()
-            .reset_index(drop=True)
-            .pivot(columns=f"{g} {which}", values=f"Wt{ix} {which}")
-            .fillna(0)
-        )
+        def _get_wideform(ix, g):
+            return (
+                ds[[f"{g} {which}", f"Wt{ix} {which}"]]
+                .to_dataframe()
+                .reset_index(drop=True)
+                .pivot(columns=f"{g} {which}", values=f"Wt{ix} {which}")
+                .fillna(0)
+            )
 
-    df = (sum([_get_wideform(ix, g) for ix, g in grps.items()])).set_index(
-        ds.depth.values if "depth" in ds.indexes else ds.sample.values
-    )
-    class_key = next(
-        iter(
-            [
-                k
-                for k in get_system_subset_attrs(ds, which=which, level=level)
-                if "Colors" not in k
-            ]
+        classattrs = [
+            k
+            for k in get_system_subset_attrs(ds, which=which, level=level)
+            if "Colors" not in k
+        ]
+        class_key = next(iter(classattrs))
+        idx, cl = (
+            ds.depth.values if "depth" in ds.indexes else ds.sample.values,
+            ds.attrs[class_key],
         )
-    )
-    df = df[
-        [c for c in ds.attrs[class_key] if (c in df.columns)]
-    ]  # sort order of columns
+        df = pd.DataFrame(np.zeros((idx.size, len(cl))), columns=cl, index=idx)
+        for ix, g in grps.items():
+            # this wasn't working because of the depth indexing?
+            df += _get_wideform(ix, g).reindex(columns=cl).values
+
+    df = df.where(df > 0)
+
+    if dropna:
+        df = df.dropna(how="all", axis=1)
+
+    if step is not None:
+        df = composite(df, step=step, agg=agg)
+
     df.name = f"sTSA{which}{'Groups' if level == 'Grp' else 'Minerals'}"
-    df.columns.name = None
-    df.index.name = next(iter(ds.dims))
-    df.columns.name = "{which}group" if level == "Grp" else "{which}mineral"
-    return df.where(df > 0).dropna(how="all", axis=1)
+    df.index.name = "sample" if "sample" in ds.dims else "depth"
+    df.columns.name = f"{which}group" if level == "Grp" else f"{which}mineral"
+    df.attrs["colormap"] = get_product_colormap(ds, which=which, level=level)
+    return df
 
 
-def products_to_group_table(ds: xarray.Dataset, which: str = "sTSAS") -> pd.DataFrame:
+def products_to_group_table(
+    ds: xarray.Dataset,
+    which: str = "sTSAS",
+    **kwargs,
+) -> pd.DataFrame:
     """
     Summarize a TSG scalar/product table, aggregating the long-form
     used in TSG to a full table.
@@ -166,10 +245,14 @@ def products_to_group_table(ds: xarray.Dataset, which: str = "sTSAS") -> pd.Data
     pandas.DataFrame
         Dataframe with groups as columns.
     """
-    return _product_summary_table(ds, which, level="Grp")
+    return _product_summary_table(ds, which, level="Grp", **kwargs)
 
 
-def products_to_mineral_table(ds: xarray.Dataset, which: str = "sTSAS") -> pd.DataFrame:
+def products_to_mineral_table(
+    ds: xarray.Dataset,
+    which: str = "sTSAS",
+    **kwargs,
+) -> pd.DataFrame:
     """
     Summarize a TSG scalar/product table, aggregating the long-form
     used in TSG to a full table.
@@ -186,7 +269,7 @@ def products_to_mineral_table(ds: xarray.Dataset, which: str = "sTSAS") -> pd.Da
     pandas.DataFrame
         Dataframe with minerals as columns.
     """
-    return _product_summary_table(ds, which, level="Min")
+    return _product_summary_table(ds, which, level="Min", **kwargs)
 
 
 def get_product_colormap(
@@ -289,6 +372,7 @@ def plot_product_downhole(
     which: str,
     level: str = "Grp",
     step: float | None = None,
+    agg: Callable | None = None,
     ax: matplotlib.axes.Axes | None = None,
     invert: bool = True,
 ):
@@ -318,22 +402,10 @@ def plot_product_downhole(
     -------
     matplotlib.axes.Axes
     """
-    products = _product_summary_table(ds, which=which, level=level)
-    colormap = get_product_colormap(ds, which=which, level=level)
-    if step is not None:
-        nsteps = (products.index.values[-1] - products.index.values[0]) // step + 1
-        products = products.groupby(
-            pd.cut(products.index, products.index.values[0] + np.arange(nsteps) * step),
-            observed=False,
-        ).agg(lambda x: np.nansum(x) / len(x))
-        products.index = products.index.map(
-            dict(
-                zip(
-                    products.index.categories,
-                    products.index.categories.map(lambda c: (c.left + c.right) / 2),
-                )
-            )
-        ).values
+    products = _product_summary_table(ds, which=which, level=level, step=step, agg=agg)
+    colormap = products.attrs.get(
+        "colormap", get_product_colormap(ds, which=which, level=level)
+    )
 
     if ax is None:
         _fig, ax = plt.subplots(1, figsize=(6, 15))
