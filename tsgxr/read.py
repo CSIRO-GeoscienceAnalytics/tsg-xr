@@ -1,6 +1,7 @@
 import re
 from pathlib import Path
 
+import joblib
 import numpy as np
 import pandas as pd
 import pytsg.parse_tsg
@@ -75,12 +76,13 @@ def interpolate_section_depths(
     return section_depth_interp
 
 
-def _reindex_depth(
+def _subset_samples_no_depth_duplicates(
     da: xarray.DataArray | xarray.Dataset,
     template: xarray.Dataset | xarray.DataArray | None = None,
-) -> xarray.DataArray | xarray.Dataset:
+) -> xarray.DataArray:
     """
-    Reindex a dataset such that it's indexed by depth.
+    Reindex a dataset's samples such that it's sorted by depth
+    and depth-duplicates are removed.
 
     Parameters
     ----------
@@ -92,22 +94,19 @@ def _reindex_depth(
 
     Returns
     -------
-    xarray.DataArray | xarray.Dataset
-        Reindexed dataset.
+    xarray.DataArray
+        Index of samples fitting the requirements.
 
     Notes
     -----
     This is a lossy process where depth is duplicated.
     """
-    # remove samples where the depth is a duplicate, and sort by depth
-    # to allow depth as an index
     if template is None:
         template = da
     fltr = pd.Series(template.depth).duplicated().values
     return (
-        da.sel(sample=~fltr)
+        da.sample.sel(sample=~fltr)
         .isel(sample=np.argsort(template.sel(sample=~fltr).depth.values))
-        .swap_dims({"sample": "depth"})
         .sortby("depth")
     )
 
@@ -299,7 +298,7 @@ def product_dataset_to_xarray(
     return products
 
 
-def open_tsg(  #
+def open_tsg(
     directory: str | Path,
     image: bool = True,
     index_coord: str = "sample",
@@ -337,49 +336,60 @@ def open_tsg(  #
     """
     directory = Path(directory)
 
-    # TODO: read each of the file pairs using the xarray backend
-
-    spectral_bips = [f for f in directory.glob("*.bip*") if "cras" not in f.stem]
-    D = {}
-    for f in spectral_bips:
-        sset = SPECTRAL_MAPPING.get(f.stem.split("_")[-1])
-        ds = xarray.open_dataset(
-            f, engine="tsg", collapse_products=collapse_products
-        ).drop_vars("half")
-        if not lazy:
-            ds = ds.load()
-        D = {**D, f"{sset}": ds}
     lidar = next(directory.glob("*tsg_hires.dat*"))
-    if lidar:
-        prof_da = xarray.DataArray(  # TODO: lazy loader?
-            pytsg.parse_tsg.read_hires_dat(lidar), dims=("sample",)
-        ).assign_coords(
-            {
-                k: v
-                for k, v in ds.coords.items()
-                if k == "sample" or (isinstance(v, tuple) and v[0] == "sample")
-            }
-        )
-        if index_coord == "depth":
-            prof_da = _reindex_depth(prof_da, template=ds)
-        if chunks:
-            prof_da = prof_da.chunk(
-                chunks
-                if isinstance(chunks, int)
-                else {k: v for k, v in chunks.items() if k in prof_da.dims}
-            )
-        D["Lidar"] = prof_da.to_dataset(name="Lidar")
 
-    if index_coord == "depth":  # TODO: rechunk?
+    files = sorted(
+        [f for f in directory.glob("*.bip*") if "cras" not in f.stem],
+        key=lambda x: x.stem,
+    ) + ([lidar] if lidar else [])
+
+    def _load(fpath):
+        if fpath.suffix == ".bip":
+            ds = xarray.open_dataset(
+                fpath,
+                engine="tsg",
+                collapse_products=collapse_products,
+            ).drop_vars("half")
+            if not lazy:
+                ds = ds.load()
+        else:
+            # TODO: lazy loader? Probably not worth it here
+            ds = xarray.DataArray(
+                pytsg.parse_tsg.read_hires_dat(lidar), dims=("sample",)
+            ).to_dataset(name="Lidar")
+        return ds
+
+    D = {
+        SPECTRAL_MAPPING.get(f.stem.split("_")[-1])
+        if f.suffix == ".bip"
+        else "Lidar": v
+        for f, v in zip(
+            files,
+            joblib.Parallel(
+                backend="threading", n_jobs=len(files), return_as="generator"
+            )(joblib.delayed(_load)(fpath) for fpath in files),
+        )
+    }
+    template = D[next(iter([k for k in D if "Spectra" in D[k].data_vars]))]
+    if index_coord == "depth":
+        # TODO: can we reindex depth once, for all of these?
+        samples = _subset_samples_no_depth_duplicates(template)
         for k in D:
-            if "Spectra" in D[k].data_vars:
-                D[k] = _reindex_depth(D[k])
-                if chunks:
-                    D[k] = D[k].chunk(
-                        chunks
-                        if isinstance(chunks, int)
-                        else {k: v for k, v in chunks.items() if k in D[k].dims}
-                    )
+            if k == "Lidar":  # Lidar still needs the extra coordinates
+                D[k] = D[k].assign_coords(
+                    {
+                        k: v
+                        for k, v in template.coords.items()
+                        if k == "sample" or (isinstance(v, tuple) and v[0] == "sample")
+                    }
+                )
+            D[k] = D[k].sel(sample=samples).swap_dims({"sample": "depth"})
+            if chunks:
+                D[k] = D[k].chunk(
+                    chunks
+                    if isinstance(chunks, int)
+                    else {k: v for k, v in chunks.items() if k in D[k].dims}
+                )
 
     if image:
         crasfile = list(directory.glob("*cras.bip*"))
@@ -393,10 +403,11 @@ def open_tsg(  #
             image_ds = xarray.open_dataset(
                 crasfile, engine="lazycras" if lazy else "cras"
             )
-            # NOTE: these uses the last spectral dataset accessed above
+            # NOTE: these uses the template spectral dataset accessed above
             # this version hasn't yet been depth-reindexed!
-            depths = interpolate_section_depths(ds, image_ds.Image.attrs["section"])
-            # TODO: assign section-part IDs?
+            depths = interpolate_section_depths(
+                template, image_ds.Image.attrs["section"]
+            )
             _dx = dy = np.median(np.diff(depths[:200]))
             horizontal = np.arange(0, image_ds.Image.shape[1]) * dy
             horizontal -= horizontal.mean()
@@ -419,22 +430,21 @@ def open_tsg(  #
                         }
                     )
                 )
-
             else:
                 #  we can assign sample-based coords
                 pixels_per_sample = (
-                    image_ds.coords["depth"].size / ds["Spectra"].coords["sample"].size
+                    image_ds.coords["depth"].size
+                    / template["Spectra"].coords["sample"].size
                 )
                 assert np.isclose(
                     int(pixels_per_sample), pixels_per_sample
                 )  # should be an even number
                 pixels_per_sample = int(pixels_per_sample)
                 # the image will have its own depth but otherwise the sample coords should transfer
-
                 image_ds = image_ds.assign_coords(
                     {
                         k: ("x", np.repeat(v.values, pixels_per_sample))
-                        for k, v in ds["Spectra"].coords.items()
+                        for k, v in template["Spectra"].coords.items()
                         if (k == "sample" or v.dims[0] == "sample") and k != "depth"
                     }
                 )
@@ -446,4 +456,5 @@ def open_tsg(  #
                     else {k: v for k, v in chunks.items() if k in image_ds.dims}
                 )
             D["Image"] = image_ds
+    del template
     return xarray.DataTree.from_dict(D)
