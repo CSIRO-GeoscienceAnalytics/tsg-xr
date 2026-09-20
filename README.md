@@ -3,9 +3,9 @@
 The file format associated with [The Spectral Geologist™](https://research.csiro.au/thespectralgeologist/) 
 (and specifically [Hylogger™](https://corescan.com.au/products/hylogger/) datasets which
 have been processed with the software) consists of an ensemble of files:
-* Binary data files containing spectra, high resolutoin imagery and profilometer data
+* Binary data files containing spectra, high resolution imagery and profilometer data
 * Configuration files (principally text, similar in format to TOML)
-* Low resolution core imagery exports (hole overview, per-tray imagery; as JPEG images with associated markup)
+* Typically, low resolution core imagery exports (hole overview, per-tray imagery; as JPEG images with associated markup)
 
 `tsg-xr` heavily leverages the filereader of [`pytsg`](https://https://github.com/Geological-Survey-of-Western-Australia/pytsg) to 
 provide access to these data, and presents data in an [Xarray](https://xarray.pydata.org) format to condense the 
