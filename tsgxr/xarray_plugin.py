@@ -106,7 +106,7 @@ def parse_scalars(
                 zip(  # names here are only valid where map_class_names=True
                     (v if map_class_names else i for i, v in ch.classes.items()),
                     [
-                        f"#{r:02x}{b:02x}{g:02x}"
+                        f"#{r:02x}{g:02x}{b:02x}"
                         for (r, g, b) in (
                             bgrint_to_rgb(np.array(ch.colors, dtype="int")) * 255
                         )
